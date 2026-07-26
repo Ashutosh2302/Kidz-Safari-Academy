@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum FeeStatus {
+  DUE
+  PAID
+  PARTIAL
+  WAIVED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK
+  OTHER
+}
+
+model Student {
+  id             String             @id @default(cuid())
+  name           String
+  dob            DateTime?
+  parentName     String
+  parentPhone    String
+  /// Optional portrait URL for the parent-view avatar
+  photoUrl       String?
+  magicLinkToken String             @unique
+  enrolledOn     DateTime           @default(now())
+  /// Per-student monthly fee — copied onto each new fee cycle as amountDue
+  monthlyFee     Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @default(now()) @updatedAt
+  sessions       Session[]
+  attendance     Attendance[]
+  milestones     StudentMilestone[]
+  feeCycles      FeeCycle[]
+  payments       Payment[]
+
+  @@index([magicLinkToken])
+  @@index([enrolledOn])
+  @@map("students")
+}
+
+model Session {
+  id               String         @id @default(cuid())
+  studentId        String
+  student          Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionDate      DateTime
+  notes            String
+  /// Parent-facing activity tag: Circle Time / Art / Outdoor / Story
+  activityCategory String         @default("Circle Time")
+  createdBy        String         @default("teacher")
+  createdAt        DateTime       @default(now())
+  photos           SessionPhoto[]
+
+  @@unique([studentId, sessionDate])
+  @@index([studentId])
+  @@index([sessionDate])
+  @@map("sessions")
+}
+
+model SessionPhoto {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  photoUrl    String
+  caption     String?
+  /// Teacher-flagged standout — prioritized in Memory Lane Month/Lifetime
+  isHighlight Boolean  @default(false)
+  mediaId     String?
+  media       MediaAsset? @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([mediaId])
+  @@index([isHighlight])
+  @@map("session_photos")
+}
+
+/// Uploaded photos/videos waiting to be tagged onto children
+model MediaAsset {
+  id           String         @id @default(cuid())
+  url          String
+  contentType  String
+  kind         String
+  originalName String?
+  /// Flag before/after publish — copied onto SessionPhoto when tagged
+  isHighlight  Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  /// Set when teacher has published this asset to at least one child
+  assignedAt   DateTime?
+  photos       SessionPhoto[]
+
+  @@index([assignedAt])
+  @@index([createdAt])
+  @@map("media_assets")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    AttendanceStatus
+  /// Hours present that day. Full class = 2; override to 1 for a short stay.
+  hoursAttended Int          @default(2)
+  /// True when class ran on a usual off day (Sat/Sun) — shown as an “extra mile” to parents.
+  isExtraClass  Boolean      @default(false)
+  note      String?
+  createdAt DateTime         @default(now())
+
+  @@unique([studentId, date])
+  @@index([date])
+  @@index([studentId])
+  @@map("attendance")
+}
+
+model Milestone {
+  id        String             @id @default(cuid())
+  name      String
+  category  String
+  icon      String             @default("⭐")
+  createdAt DateTime           @default(now())
+  students  StudentMilestone[]
+
+  @@index([category])
+  @@map("milestones")
+}
+
+model StudentMilestone {
+  id           String    @id @default(cuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  milestoneId  String
+  milestone    Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  achievedDate DateTime  @default(now())
+  /// Specific one-line observation shown on the parent leap card
+  note         String?
+
+  @@unique([studentId, milestoneId])
+  @@index([studentId])
+  @@map("student_milestones")
+}
+
+/// One billing period per student, anchored to their join date (not calendar months)
+model FeeCycle {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  periodStart DateTime
+  periodEnd   DateTime
+  amountDue   Int
+  /// Denormalized sum of Payment rows for this cycle
+  amountPaid  Int       @default(0)
+  status      FeeStatus @default(DUE)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  payments    Payment[]
+
+  @@unique([studentId, periodStart])
+  @@index([status])
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@map("fee_cycles")
+}
+
+/// Individual payment ledger entry — never overwrite; partials stack over time
+model Payment {
+  id         String        @id @default(cuid())
+  feeCycleId String
+  feeCycle   FeeCycle      @relation(fields: [feeCycleId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount     Int
+  method     PaymentMethod @default(CASH)
+  note       String?
+  paidAt     DateTime      @default(now())
+  createdAt  DateTime      @default(now())
+
+  @@index([feeCycleId])
+  @@index([studentId])
+  @@index([paidAt])
+  @@map("payments")
+}

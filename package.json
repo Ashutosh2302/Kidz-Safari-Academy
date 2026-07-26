@@ -1,0 +1,47 @@
+{
+  "name": "gentle-sprouts-academy",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "db:migrate": "npx prisma migrate dev",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed:leaps": "SEED_LEAP_LIBRARY=1 npx tsx prisma/seed.ts",
+    "db:seed:demo": "SEED_DEMO_STUDENTS=1 npx tsx prisma/seed.ts",
+    "db:clear-students": "npx tsx scripts/clear-student-data.ts",
+    "db:merge-sessions": "npx tsx scripts/merge-duplicate-sessions.ts",
+    "db:regen-tokens": "npx tsx scripts/regenerate-magic-tokens.ts",
+    "db:studio": "npx prisma studio",
+    "postinstall": "npx prisma generate"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
+    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/client": "^7.9.0",
+    "lucide-react": "^1.26.0",
+    "nanoid": "^6.0.0",
+    "next": "16.2.11",
+    "pg": "^8.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.11",
+    "prisma": "^7.9.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}
