@@ -1,22 +1,29 @@
 import { MemoryLane } from "@/components/MemoryLane";
+import {
+  INLINE_LEAP_LIMIT,
+  LeapUnlockCard,
+  LeapUnlockCardList,
+} from "@/components/LeapUnlockCard";
+import { ViewMoreLeapsButton } from "@/components/ParentExtrasModals";
 import { ShareUpdate } from "@/components/ShareUpdate";
 import { hoursOfPlayLabel, screenFreeHoursLabel } from "@/lib/copy";
 import type { MemoryLanePhoto } from "@/lib/memory-lane";
 
-type MilestoneHighlight = {
+export type LeapHighlight = {
   id: string;
   name: string;
   category: string;
   icon: string;
   description: string;
-} | null;
+};
 
 export function ParentThisWeek({
   name,
   weekHours,
   weekTarget,
   hoursSinceJoining,
-  milestone,
+  milestones,
+  totalLeapCount,
   joinedOn,
   memoryPhotos,
 }: {
@@ -24,13 +31,17 @@ export function ParentThisWeek({
   weekHours: number;
   weekTarget: number;
   hoursSinceJoining: number;
-  milestone: MilestoneHighlight;
+  /** Up to 3 recent leaps for the compact preview row. */
+  milestones: LeapHighlight[];
+  totalLeapCount: number;
   joinedOn: string;
   memoryPhotos: MemoryLanePhoto[];
 }) {
   const fill = Math.min(100, (weekHours / Math.max(weekTarget, 1)) * 100);
-  // Exact fill so 1/5 reads as a true fifth; plant sits on top of the waterline
   const plantHeight = fill;
+  const shareMilestone = milestones[0] ?? null;
+  const remainingCount = Math.max(0, totalLeapCount - milestones.length);
+  const showViewMore = totalLeapCount > INLINE_LEAP_LIMIT;
 
   return (
     <section
@@ -43,7 +54,7 @@ export function ParentThisWeek({
             This week
           </p>
           <h2 className="font-display text-2xl font-bold text-forest">
-            Why this hour mattered
+            Screen-free hours
           </h2>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -59,12 +70,12 @@ export function ParentThisWeek({
             <ShareUpdate
               childName={name}
               milestone={
-                milestone
+                shareMilestone
                   ? {
-                      name: milestone.name,
-                      category: milestone.category,
-                      icon: milestone.icon,
-                      description: milestone.description,
+                      name: shareMilestone.name,
+                      category: shareMilestone.category,
+                      icon: shareMilestone.icon,
+                      description: shareMilestone.description,
                     }
                   : null
               }
@@ -73,8 +84,8 @@ export function ParentThisWeek({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {/* Screen-time saved plant/jar */}
+      {/* Same 2-col row height as before — garden | compact 3-leap strip */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:items-stretch">
         <div
           id="this-week-screentime"
           className="flex items-center gap-4 rounded-2xl border-2 border-forest bg-mint/60 p-4 scroll-mt-6 transition"
@@ -83,7 +94,6 @@ export function ParentThisWeek({
             className="relative flex h-24 w-16 shrink-0 flex-col justify-end overflow-hidden rounded-b-[2rem] rounded-t-lg border-2 border-forest bg-cream"
             aria-hidden
           >
-            {/* Fifth-marks so low fill looks intentional */}
             {[1, 2, 3, 4].map((fifth) => (
               <div
                 key={fifth}
@@ -98,7 +108,10 @@ export function ParentThisWeek({
             <div
               className="absolute inset-x-0 z-10 flex flex-col items-center transition-all duration-700"
               style={{
-                bottom: plantHeight > 0 ? `calc(${plantHeight}% - 0.35rem)` : "0.35rem",
+                bottom:
+                  plantHeight > 0
+                    ? `calc(${plantHeight}% - 0.35rem)`
+                    : "0.35rem",
               }}
             >
               <span className="text-lg leading-none drop-shadow-sm">🌿</span>
@@ -113,8 +126,8 @@ export function ParentThisWeek({
               {hoursOfPlayLabel(weekHours)}
             </p>
             <p className="mt-1 text-sm leading-snug text-ink-soft">
-              Instead of screens this week — each present class grows{" "}
-              {name}&apos;s little garden.
+              Instead of screens, {name} spent this time playing, building, and
+              exploring with classmates.
             </p>
             <div className="relative mt-2 h-2 overflow-hidden rounded-full border border-forest/25 bg-cream">
               {[1, 2, 3, 4].map((fifth) => (
@@ -135,32 +148,13 @@ export function ParentThisWeek({
           </div>
         </div>
 
-        {/* Leap highlight */}
+        {/* Same rectangle slot — 3 compact modal-style tiles inside */}
         <div
           id="this-week-milestone"
-          className={`rounded-2xl border-2 border-forest p-4 scroll-mt-6 transition ${
-            milestone ? "bg-pastel-yellow" : "bg-cream"
-          }`}
+          className="flex flex-col justify-center rounded-2xl border-2 border-forest bg-cream p-2.5 scroll-mt-6 sm:p-3"
         >
-          {milestone ? (
-            <div className="flex items-start gap-3">
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 border-forest bg-card text-3xl shadow-[var(--shadow-card)]">
-                {milestone.icon}
-              </span>
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-forest-soft">
-                  Leap unlocked · {milestone.category}
-                </p>
-                <p className="font-display text-xl font-bold text-forest">
-                  {milestone.name}
-                </p>
-                <p className="mt-1 text-sm leading-snug text-ink-soft">
-                  {milestone.description}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-full min-h-[7.5rem] flex-col justify-center">
+          {milestones.length === 0 ? (
+            <div className="px-1 py-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-forest-soft">
                 Tiny leaps · 0 yet
               </p>
@@ -172,9 +166,29 @@ export function ParentThisWeek({
                 leap, the specific moment will shine here.
               </p>
             </div>
+          ) : (
+            <>
+              <LeapUnlockCardList>
+                {milestones.map((milestone, index) => (
+                  <LeapUnlockCard
+                    key={milestone.id}
+                    index={index}
+                    icon={milestone.icon}
+                    name={milestone.name}
+                    category={milestone.category}
+                    description={milestone.description}
+                  />
+                ))}
+              </LeapUnlockCardList>
+              {showViewMore ? (
+                <ViewMoreLeapsButton remainingCount={remainingCount} />
+              ) : null}
+            </>
           )}
         </div>
       </div>
     </section>
   );
 }
+
+export { INLINE_LEAP_LIMIT };

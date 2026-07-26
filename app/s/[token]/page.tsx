@@ -3,8 +3,14 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { ChildAvatar } from "@/components/ChildAvatar";
 import { DashDivider } from "@/components/DashDivider";
 import { MediaCarousel } from "@/components/MediaCarousel";
-import { ParentExtrasModals } from "@/components/ParentExtrasModals";
-import { ParentThisWeek } from "@/components/ParentThisWeek";
+import {
+  ParentExtrasModals,
+  ParentExtrasProvider,
+} from "@/components/ParentExtrasModals";
+import {
+  INLINE_LEAP_LIMIT,
+  ParentThisWeek,
+} from "@/components/ParentThisWeek";
 import { WithUsSince } from "@/components/WithUsSince";
 import {
   consecutiveClassStreak,
@@ -90,27 +96,41 @@ export default async function ParentPortalPage({
   const classStreak = consecutiveClassStreak(student.attendance);
   const isNewJourney = sessionCount === 0;
 
-  const weekMilestone = student.milestones.find((m) =>
-    isInCurrentWeek(m.achievedDate),
-  );
-  const thisWeekOnly = weekMilestone
-    ? {
-        id: weekMilestone.id,
-        name: weekMilestone.milestone.name,
-        category: weekMilestone.milestone.category,
-        icon: weekMilestone.milestone.icon,
-        description:
-          weekMilestone.note?.trim() ||
-          milestoneLeapDescription(
-            name,
-            weekMilestone.milestone.category,
-          ),
-      }
-    : null;
+  // Most recent leaps for the compact This Week strip (same tiles as All leaps)
+  const recentMilestones = student.milestones
+    .slice(0, INLINE_LEAP_LIMIT)
+    .map((m) => ({
+      id: m.id,
+      name: m.milestone.name,
+      category: m.milestone.category,
+      icon: m.milestone.icon,
+      description:
+        m.note?.trim() ||
+        milestoneLeapDescription(name, m.milestone.category),
+    }));
 
   const dayNumberById = dayNumberBySessionId(student.sessions);
 
+  const attendancePayload = student.attendance.map((a) => ({
+    date: a.date.toISOString(),
+    status: a.status,
+    note: a.note,
+    hoursAttended: a.hoursAttended,
+    isExtraClass: a.isExtraClass,
+  }));
+  const milestonesPayload = student.milestones.map((m) => ({
+    id: m.id,
+    achievedDate: m.achievedDate.toISOString(),
+    note: m.note,
+    milestone: m.milestone,
+  }));
+
   return (
+    <ParentExtrasProvider
+      name={name}
+      attendance={attendancePayload}
+      milestones={milestonesPayload}
+    >
     <main className="parent-journal min-h-screen overflow-x-hidden">
       <header className="hero-band border-b-4 border-yellow px-5 py-4 sm:px-8 sm:py-5 lg:px-12">
         <div className="mx-auto flex max-w-6xl flex-col gap-3">
@@ -127,25 +147,11 @@ export default async function ParentPortalPage({
               </div>
             </div>
             <ParentExtrasModals
-              name={name}
               presentHours={hoursSinceJoining}
               leapCount={student.milestones.length}
               sessionCount={sessionCount}
               photoCount={photoCount}
               classStreak={classStreak}
-              attendance={student.attendance.map((a) => ({
-                date: a.date.toISOString(),
-                status: a.status,
-                note: a.note,
-                hoursAttended: a.hoursAttended,
-                isExtraClass: a.isExtraClass,
-              }))}
-              milestones={student.milestones.map((m) => ({
-                id: m.id,
-                achievedDate: m.achievedDate.toISOString(),
-                note: m.note,
-                milestone: m.milestone,
-              }))}
             />
           </div>
 
@@ -177,7 +183,8 @@ export default async function ParentPortalPage({
             weekHours={weekHours}
             weekTarget={weekHoursTarget()}
             hoursSinceJoining={hoursSinceJoining}
-            milestone={thisWeekOnly}
+            milestones={recentMilestones}
+            totalLeapCount={student.milestones.length}
             joinedOn={student.enrolledOn.toISOString()}
             memoryPhotos={student.sessions.flatMap((session) =>
               session.photos
@@ -297,5 +304,6 @@ export default async function ParentPortalPage({
         </p>
       </footer>
     </main>
+    </ParentExtrasProvider>
   );
 }

@@ -9,6 +9,7 @@ type Item = {
   };
 };
 
+/** All leaps modal body — previous surface-card + compact 3-up grid. */
 export function ParentMilestonesSection({
   name,
   items,
@@ -41,25 +42,25 @@ export function ParentMilestonesSection({
       <p className="mt-1 text-sm text-ink-soft">
         Skills {name} has unlocked since joining
       </p>
-      <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-4 grid grid-cols-3 gap-3">
         {items.map((item, index) => (
           <li
             key={item.id}
-            className="animate-soft-pop flex items-start gap-3 rounded-2xl border-2 border-forest bg-pastel-yellow p-3"
+            className="animate-soft-pop flex min-w-0 items-start gap-3 rounded-2xl border-2 border-forest bg-pastel-yellow p-3"
             style={{ animationDelay: `${index * 60}ms` }}
           >
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-forest bg-card text-2xl">
               {item.milestone.icon}
             </span>
             <span className="min-w-0">
-              <span className="block font-display font-bold text-forest">
+              <span className="block truncate font-display font-bold text-forest">
                 {item.milestone.name}
               </span>
-              <span className="text-xs font-semibold text-forest-soft">
+              <span className="block truncate text-xs font-semibold text-forest-soft">
                 {item.milestone.category}
               </span>
               {item.note?.trim() ? (
-                <span className="mt-1 block text-sm leading-snug text-ink-soft">
+                <span className="mt-1 line-clamp-2 block text-sm leading-snug text-ink-soft">
                   {item.note.trim()}
                 </span>
               ) : null}

@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ParentAttendanceSection } from "@/components/ParentAttendanceSection";
 import { ParentMilestonesSection } from "@/components/ParentMilestonesSection";
 
@@ -25,6 +34,23 @@ type MilestoneItem = {
 
 type ModalKind = "attendance" | "milestones" | null;
 
+type PortalModalActions = {
+  openAllLeaps: () => void;
+  openAttendance: () => void;
+};
+
+const ParentPortalModalContext = createContext<PortalModalActions | null>(null);
+
+export function useParentPortalModals() {
+  const ctx = useContext(ParentPortalModalContext);
+  if (!ctx) {
+    throw new Error(
+      "useParentPortalModals must be used within ParentExtrasProvider",
+    );
+  }
+  return ctx;
+}
+
 function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -40,27 +66,25 @@ function scrollToId(id: string) {
   }, 1600);
 }
 
-export function ParentExtrasModals({
+export function ParentExtrasProvider({
   name,
   attendance,
   milestones,
-  presentHours,
-  leapCount,
-  sessionCount,
-  photoCount,
-  classStreak,
+  children,
 }: {
   name: string;
   attendance: AttendanceRow[];
   milestones: MilestoneItem[];
-  presentHours: number;
-  leapCount: number;
-  sessionCount: number;
-  photoCount: number;
-  classStreak: number;
+  children: ReactNode;
 }) {
   const [open, setOpen] = useState<ModalKind>(null);
   const titleId = useId();
+  const openAllLeaps = useCallback(() => setOpen("milestones"), []);
+  const openAttendance = useCallback(() => setOpen("attendance"), []);
+  const actions = useMemo(
+    () => ({ openAllLeaps, openAttendance }),
+    [openAllLeaps, openAttendance],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -75,82 +99,11 @@ export function ParentExtrasModals({
     };
   }, [open]);
 
-  const attendanceForSection = attendance.map((a) => ({
-    ...a,
-    date: new Date(a.date),
-  }));
-
-  const milestonesForSection = milestones.map((m) => ({
-    ...m,
-    achievedDate: new Date(m.achievedDate),
-  }));
-
-  const statPill =
-    "inline-flex items-center rounded-full border-2 border-yellow/50 bg-forest/25 px-3 py-1.5 text-xs font-bold text-yellow/95";
-
-  const actionPill =
-    "inline-flex items-center gap-1 rounded-full border-2 border-yellow bg-yellow px-3 py-1.5 text-xs font-bold text-forest shadow-[2px_2px_0_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5";
-
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Informational stats */}
-        {sessionCount > 0 && (
-          <span className={statPill}>
-            {sessionCount} session{sessionCount === 1 ? "" : "s"}
-          </span>
-        )}
-        {classStreak >= 2 && (
-          <span className={statPill}>
-            {classStreak} class{classStreak === 1 ? "" : "es"} in a row
-          </span>
-        )}
-        {photoCount > 0 && (
-          <span className={statPill}>
-            {photoCount} photo{photoCount === 1 ? "" : "s"}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => scrollToId("this-week-screentime")}
-          className={statPill}
-          title="Jump to this week’s screen-time"
-        >
-          Showing up{presentHours > 0 ? ` · ${presentHours}h` : ""}
-        </button>
-        <button
-          type="button"
-          onClick={() => scrollToId("this-week-milestone")}
-          className={statPill}
-          title="Jump to this week’s leap"
-        >
-          Tiny leaps{leapCount > 0 ? ` · ${leapCount}` : ""}
-        </button>
+    <ParentPortalModalContext.Provider value={actions}>
+      {children}
 
-        {/* Clear actions */}
-        <button
-          type="button"
-          onClick={() => setOpen("attendance")}
-          className={actionPill}
-        >
-          Calendar
-          <span aria-hidden className="text-[10px]">
-            ▾
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen("milestones")}
-          className={actionPill}
-        >
-          All leaps
-          <span aria-hidden className="text-[10px]">
-            ▾
-          </span>
-        </button>
-      </div>
-
-      {open && (
+      {open ? (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-forest/50 p-3 sm:items-center sm:p-6"
           role="presentation"
@@ -182,18 +135,112 @@ export function ParentExtrasModals({
               {open === "attendance" ? (
                 <ParentAttendanceSection
                   name={name}
-                  attendance={attendanceForSection}
+                  attendance={attendance.map((a) => ({
+                    ...a,
+                    date: new Date(a.date),
+                  }))}
                 />
               ) : (
                 <ParentMilestonesSection
                   name={name}
-                  items={milestonesForSection}
+                  items={milestones.map((m) => ({
+                    ...m,
+                    achievedDate: new Date(m.achievedDate),
+                  }))}
                 />
               )}
             </div>
           </div>
         </div>
+      ) : null}
+    </ParentPortalModalContext.Provider>
+  );
+}
+
+export function ParentExtrasModals({
+  presentHours,
+  leapCount,
+  sessionCount,
+  photoCount,
+  classStreak,
+}: {
+  presentHours: number;
+  leapCount: number;
+  sessionCount: number;
+  photoCount: number;
+  classStreak: number;
+}) {
+  const { openAllLeaps, openAttendance } = useParentPortalModals();
+
+  const statPill =
+    "inline-flex items-center rounded-full border-2 border-yellow/50 bg-forest/25 px-3 py-1.5 text-xs font-bold text-yellow/95";
+  const actionPill =
+    "inline-flex items-center gap-1 rounded-full border-2 border-yellow bg-yellow px-3 py-1.5 text-xs font-bold text-forest shadow-[2px_2px_0_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5";
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {sessionCount > 0 && (
+        <span className={statPill}>
+          {sessionCount} session{sessionCount === 1 ? "" : "s"}
+        </span>
       )}
-    </>
+      {classStreak >= 2 && (
+        <span className={statPill}>
+          {classStreak} class{classStreak === 1 ? "" : "es"} in a row
+        </span>
+      )}
+      {photoCount > 0 && (
+        <span className={statPill}>
+          {photoCount} photo{photoCount === 1 ? "" : "s"}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => scrollToId("this-week-screentime")}
+        className={statPill}
+        title="Jump to this week’s screen-time"
+      >
+        Showing up{presentHours > 0 ? ` · ${presentHours}h` : ""}
+      </button>
+      <button
+        type="button"
+        onClick={() => scrollToId("this-week-milestone")}
+        className={statPill}
+        title="Jump to this week’s leap"
+      >
+        Tiny leaps{leapCount > 0 ? ` · ${leapCount}` : ""}
+      </button>
+      <button type="button" onClick={openAttendance} className={actionPill}>
+        Calendar
+        <span aria-hidden className="text-[10px]">
+          ▾
+        </span>
+      </button>
+      <button type="button" onClick={openAllLeaps} className={actionPill}>
+        All leaps
+        <span aria-hidden className="text-[10px]">
+          ▾
+        </span>
+      </button>
+    </div>
+  );
+}
+
+export function ViewMoreLeapsButton({
+  remainingCount,
+}: {
+  remainingCount: number;
+}) {
+  const { openAllLeaps } = useParentPortalModals();
+  return (
+    <button
+      type="button"
+      onClick={openAllLeaps}
+      className="mt-1.5 text-left text-[11px] font-bold leading-none text-forest-soft transition hover:text-forest sm:text-xs"
+    >
+      {remainingCount > 0
+        ? `View more leaps (${remainingCount}) →`
+        : "View more leaps →"}
+    </button>
   );
 }
