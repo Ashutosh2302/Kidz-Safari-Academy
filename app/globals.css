@@ -101,8 +101,8 @@ body {
     transform: scale(1) translate(0%, 0%);
   }
   to {
-    /* Gentle drift — starts uncropped with object-contain */
-    transform: scale(1.05) translate(-1.2%, -0.8%);
+    /* Subtle drift — media is sized to fit so this stays inside the frame */
+    transform: scale(1.03) translate(-0.6%, -0.4%);
   }
 }
 
@@ -111,7 +111,7 @@ body {
     transform: scale(1) translate(0%, 0%);
   }
   to {
-    transform: scale(1.06) translate(1.2%, -0.8%);
+    transform: scale(1.035) translate(0.6%, -0.4%);
   }
 }
 

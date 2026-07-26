@@ -268,12 +268,12 @@ export function MemoryLane({
 
       {phase !== "closed" && (
         <div
-          className="fixed inset-0 z-[60] flex flex-col bg-forest/95 text-cream"
+          className="fixed inset-0 z-[60] flex min-h-0 flex-col overflow-hidden bg-forest/95 text-cream"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
         >
-          <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6">
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6">
             <div>
               <p
                 id={titleId}
@@ -325,7 +325,7 @@ export function MemoryLane({
           </header>
 
           {(phase === "play" || phase === "end") && (
-            <div className="mx-4 h-1 overflow-hidden rounded-full bg-cream/20 sm:mx-6">
+            <div className="mx-4 h-1 shrink-0 overflow-hidden rounded-full bg-cream/20 sm:mx-6">
               <div
                 className="h-full rounded-full bg-yellow transition-all duration-500"
                 style={{ width: `${progress}%` }}
@@ -367,40 +367,54 @@ export function MemoryLane({
           )}
 
           {phase === "play" && current && (
-            <div className="relative flex flex-1 flex-col">
-              <div className="relative mx-auto mt-3 flex min-h-[50vh] w-full max-w-5xl flex-1 items-center justify-center overflow-hidden rounded-[1.5rem] border-4 border-yellow bg-forest sm:mt-4">
-                {current.isVideo ? (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video
-                    key={kenKey}
-                    ref={videoRef}
-                    src={current.url}
-                    muted
-                    playsInline
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={kenKey}
-                    src={current.url}
-                    alt=""
-                    className={`memory-ken max-h-full max-w-full object-contain ${
-                      kenKey % 2 === 0 ? "memory-ken-a" : "memory-ken-b"
-                    }`}
-                  />
-                )}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-forest/90 via-forest/40 to-transparent px-5 pb-6 pt-16">
-                  <p
-                    key={`cap-${kenKey}`}
-                    className="memory-caption font-display text-lg font-semibold leading-snug text-cream sm:text-2xl"
-                  >
-                    {current.sessionNote}
-                  </p>
+            <div className="flex min-h-0 flex-1 flex-col">
+              {/*
+                Stage fills remaining viewport under header/progress/controls.
+                Cream letterbox + object-contain keeps portrait/landscape fully visible.
+              */}
+              <div
+                className="relative mx-4 mt-3 flex min-h-0 w-auto max-w-5xl flex-1 items-center justify-center self-center overflow-hidden rounded-[1.5rem] border-4 border-yellow bg-cream sm:mx-6 sm:mt-4"
+                style={{
+                  width: "min(100%, 64rem)",
+                  maxHeight: "calc(100dvh - 10.5rem)",
+                }}
+              >
+                <div className="flex h-full w-full items-center justify-center p-2 sm:p-3">
+                  {current.isVideo ? (
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <video
+                      key={kenKey}
+                      ref={videoRef}
+                      src={current.url}
+                      muted
+                      playsInline
+                      className="h-auto max-h-full w-auto max-w-full object-contain"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={kenKey}
+                      src={current.url}
+                      alt=""
+                      className={`memory-ken h-auto max-h-[96%] w-auto max-w-[96%] object-contain ${
+                        kenKey % 2 === 0 ? "memory-ken-a" : "memory-ken-b"
+                      }`}
+                    />
+                  )}
                 </div>
+                {current.sessionNote?.trim() ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-forest/85 via-forest/35 to-transparent px-4 pb-4 pt-14 sm:px-5 sm:pb-5">
+                    <p
+                      key={`cap-${kenKey}`}
+                      className="memory-caption font-display text-base font-semibold leading-snug text-cream sm:text-xl"
+                    >
+                      {current.sessionNote}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-8">
+              <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-8 sm:py-4">
                 <button
                   type="button"
                   onClick={goPrev}
