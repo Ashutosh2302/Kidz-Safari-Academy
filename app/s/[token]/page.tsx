@@ -187,15 +187,14 @@ export default async function ParentPortalPage({
             totalLeapCount={student.milestones.length}
             joinedOn={student.enrolledOn.toISOString()}
             memoryPhotos={student.sessions.flatMap((session) =>
-              session.photos
-                .filter((p) => !isVideoUrl(p.photoUrl))
-                .map((p) => ({
-                  id: p.id,
-                  url: p.photoUrl,
-                  isHighlight: p.isHighlight,
-                  sessionDate: session.sessionDate.toISOString(),
-                  sessionNote: session.notes,
-                })),
+              session.photos.map((p) => ({
+                id: p.id,
+                url: p.photoUrl,
+                isHighlight: p.isHighlight,
+                sessionDate: session.sessionDate.toISOString(),
+                sessionNote: session.notes,
+                isVideo: isVideoUrl(p.photoUrl),
+              })),
             )}
           />
 

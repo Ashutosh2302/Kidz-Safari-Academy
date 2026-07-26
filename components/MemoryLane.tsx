@@ -7,9 +7,11 @@ import { formatDisplayDate } from "@/lib/dates";
 import {
   closingLineForRange,
   filterPhotosForRange,
+  mediaCountLabel,
   RANGE_LABELS,
   SLIDE_DURATION_MS,
-  type MemoryLanePhoto,
+  VIDEO_MAX_MS,
+  type MemoryLaneMedia,
   type MemoryLaneRange,
 } from "@/lib/memory-lane";
 
@@ -24,7 +26,8 @@ export function MemoryLane({
 }: {
   name: string;
   joinedOn: string;
-  photos: MemoryLanePhoto[];
+  /** Photos and videos from the child's sessions */
+  photos: MemoryLaneMedia[];
 }) {
   const titleId = useId();
   const [phase, setPhase] = useState<Phase>("closed");
@@ -34,6 +37,7 @@ export function MemoryLane({
   const [kenKey, setKenKey] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const stopPadRef = useRef<(() => void) | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -52,7 +56,6 @@ export function MemoryLane({
     setRange("week");
     setIndex(0);
     setMuted(false);
-    // User gesture — start music.mp3 unmuted by default
     void ensureSound();
   }
 
@@ -144,25 +147,86 @@ export function MemoryLane({
     }
   }
 
-  // Auto-advance slides
+  function advanceFromSlide() {
+    if (index >= slides.length - 1) setPhase("end");
+    else {
+      setIndex((i) => i + 1);
+      setKenKey((k) => k + 1);
+    }
+  }
+
+  // Auto-advance — photos on a timer; videos play (muted) up to VIDEO_MAX_MS
   useEffect(() => {
     if (phase !== "play" || slides.length === 0) return;
-    const t = window.setTimeout(() => {
-      if (index >= slides.length - 1) setPhase("end");
-      else {
-        setIndex((i) => i + 1);
-        setKenKey((k) => k + 1);
-      }
-    }, SLIDE_DURATION_MS);
-    return () => window.clearTimeout(t);
-  }, [phase, index, slides.length]);
+    const slide = slides[index];
+    if (!slide) return;
 
-  // Empty range → jump to end card
+    if (!slide.isVideo) {
+      const t = window.setTimeout(advanceFromSlide, SLIDE_DURATION_MS);
+      return () => window.clearTimeout(t);
+    }
+
+    const video = videoRef.current;
+    if (!video) {
+      const t = window.setTimeout(advanceFromSlide, VIDEO_MAX_MS);
+      return () => window.clearTimeout(t);
+    }
+
+    let cancelled = false;
+    let capTimer: number | undefined;
+    let endedHandler: (() => void) | undefined;
+
+    const clear = () => {
+      if (capTimer) window.clearTimeout(capTimer);
+      if (endedHandler) video.removeEventListener("ended", endedHandler);
+    };
+
+    const arm = () => {
+      if (cancelled) return;
+      const durationMs = Number.isFinite(video.duration)
+        ? video.duration * 1000
+        : VIDEO_MAX_MS;
+      const hold = Math.min(
+        Math.max(durationMs, 800),
+        VIDEO_MAX_MS,
+      );
+      capTimer = window.setTimeout(() => {
+        video.pause();
+        advanceFromSlide();
+      }, hold);
+      endedHandler = () => {
+        if (capTimer) window.clearTimeout(capTimer);
+        advanceFromSlide();
+      };
+      video.addEventListener("ended", endedHandler);
+      video.currentTime = 0;
+      void video.play().catch(() => {
+        /* autoplay blocked — still advance on timer */
+      });
+    };
+
+    if (video.readyState >= 1) arm();
+    else {
+      const onMeta = () => arm();
+      video.addEventListener("loadedmetadata", onMeta, { once: true });
+      return () => {
+        cancelled = true;
+        clear();
+        video.removeEventListener("loadedmetadata", onMeta);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, index, slides, kenKey]);
+
   useEffect(() => {
     if (phase === "play" && slides.length === 0) setPhase("end");
   }, [phase, slides.length]);
 
-  // Lock body scroll while open
   useEffect(() => {
     if (phase === "closed") return;
     const prev = document.body.style.overflow;
@@ -293,7 +357,7 @@ export function MemoryLane({
                         {RANGE_LABELS[r]}
                       </span>
                       <span className="mt-1 block text-xs font-semibold text-ink-soft">
-                        {count} photo{count === 1 ? "" : "s"}
+                        {mediaCountLabel(count)}
                       </span>
                     </button>
                   );
@@ -304,16 +368,28 @@ export function MemoryLane({
 
           {phase === "play" && current && (
             <div className="relative flex flex-1 flex-col">
-              <div className="relative mx-auto mt-3 min-h-[50vh] w-full max-w-5xl flex-1 overflow-hidden rounded-[1.5rem] border-4 border-yellow sm:mt-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  key={kenKey}
-                  src={current.url}
-                  alt=""
-                  className={`memory-ken absolute inset-0 h-full w-full object-cover ${
-                    kenKey % 2 === 0 ? "memory-ken-a" : "memory-ken-b"
-                  }`}
-                />
+              <div className="relative mx-auto mt-3 flex min-h-[50vh] w-full max-w-5xl flex-1 items-center justify-center overflow-hidden rounded-[1.5rem] border-4 border-yellow bg-forest sm:mt-4">
+                {current.isVideo ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    key={kenKey}
+                    ref={videoRef}
+                    src={current.url}
+                    muted
+                    playsInline
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={kenKey}
+                    src={current.url}
+                    alt=""
+                    className={`memory-ken max-h-full max-w-full object-contain ${
+                      kenKey % 2 === 0 ? "memory-ken-a" : "memory-ken-b"
+                    }`}
+                  />
+                )}
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-forest/90 via-forest/40 to-transparent px-5 pb-6 pt-16">
                   <p
                     key={`cap-${kenKey}`}
@@ -338,7 +414,9 @@ export function MemoryLane({
                     <button
                       key={s.id}
                       type="button"
-                      aria-label={`Photo ${i + 1}`}
+                      aria-label={
+                        s.isVideo ? `Video ${i + 1}` : `Photo ${i + 1}`
+                      }
                       onClick={() => {
                         setIndex(i);
                         setKenKey((k) => k + 1);
@@ -373,7 +451,7 @@ export function MemoryLane({
               </p>
               {slides.length === 0 && (
                 <p className="text-sm text-cream/70">
-                  No photos in this window yet — try another range, or check
+                  No moments in this window yet — try another range, or check
                   back after the next class.
                 </p>
               )}

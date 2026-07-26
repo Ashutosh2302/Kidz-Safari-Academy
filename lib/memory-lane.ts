@@ -1,15 +1,25 @@
 export type MemoryLaneRange = "week" | "month" | "lifetime";
 
-export type MemoryLanePhoto = {
+export type MemoryLaneMedia = {
   id: string;
   url: string;
   isHighlight: boolean;
   sessionDate: string; // ISO
   sessionNote: string;
+  isVideo: boolean;
 };
+
+/** @deprecated Use MemoryLaneMedia — kept for call-site clarity */
+export type MemoryLanePhoto = MemoryLaneMedia;
 
 const MONTH_CAP = 14;
 const LIFETIME_CAP = 18;
+
+/** Still-photo dwell time in the slideshow */
+export const SLIDE_DURATION_MS = 4500;
+
+/** Cap how long a video holds the Memory Lane stage before advancing */
+export const VIDEO_MAX_MS = 9000;
 
 function utcDayStart(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -40,7 +50,6 @@ export function sampleEvenly<T extends { id: string }>(
       picked.push(item);
     }
   }
-  // Fill if rounding collapsed duplicates
   for (const item of items) {
     if (picked.length >= max) break;
     if (!seen.has(item.id)) {
@@ -52,12 +61,12 @@ export function sampleEvenly<T extends { id: string }>(
 }
 
 /**
- * Prefer teacher highlights, then fill with evenly spaced photos by date.
+ * Prefer teacher highlights, then fill with evenly spaced media by date.
  */
 export function samplePreferringHighlights(
-  photos: MemoryLanePhoto[],
+  photos: MemoryLaneMedia[],
   max: number,
-): MemoryLanePhoto[] {
+): MemoryLaneMedia[] {
   const sorted = [...photos].sort(
     (a, b) => +new Date(a.sessionDate) - +new Date(b.sessionDate),
   );
@@ -78,11 +87,11 @@ export function samplePreferringHighlights(
 }
 
 export function filterPhotosForRange(
-  photos: MemoryLanePhoto[],
+  photos: MemoryLaneMedia[],
   range: MemoryLaneRange,
   joinedOn: string,
   now = new Date(),
-): MemoryLanePhoto[] {
+): MemoryLaneMedia[] {
   const join = utcDayStart(new Date(joinedOn));
   const sorted = [...photos].sort(
     (a, b) => +new Date(a.sessionDate) - +new Date(b.sessionDate),
@@ -105,7 +114,6 @@ export function filterPhotosForRange(
     return samplePreferringHighlights(inWindow, MONTH_CAP);
   }
 
-  // Lifetime — since join date
   const lifetime = sorted.filter((p) => new Date(p.sessionDate) >= join);
   return samplePreferringHighlights(lifetime, LIFETIME_CAP);
 }
@@ -126,4 +134,7 @@ export const RANGE_LABELS: Record<MemoryLaneRange, string> = {
   lifetime: "Lifetime",
 };
 
-export const SLIDE_DURATION_MS = 4500;
+export function mediaCountLabel(count: number) {
+  if (count === 1) return "1 moment";
+  return `${count} moments`;
+}

@@ -9,6 +9,11 @@ type Slide = {
   isVideo: boolean;
 };
 
+const mediaFrame =
+  "flex aspect-[16/10] max-h-[420px] w-full items-center justify-center overflow-hidden rounded-xl bg-cream";
+const mediaContain =
+  "max-h-full max-w-full object-contain";
+
 export function MediaCarousel({
   slides,
   altFallback,
@@ -39,24 +44,29 @@ export function MediaCarousel({
 
   if (!current) return null;
 
+  const media = current.isVideo ? (
+    <video
+      key={current.id}
+      src={current.url}
+      controls
+      playsInline
+      className={mediaContain}
+    />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={current.id}
+      src={current.url}
+      alt={current.caption ?? altFallback}
+      className={`${mediaContain} transition duration-300`}
+      loading="lazy"
+    />
+  );
+
   if (total === 1) {
     return (
       <figure className="photo-frame photo-enter bg-card p-2 shadow-[var(--shadow-card)]">
-        {current.isVideo ? (
-          <video
-            src={current.url}
-            controls
-            className="aspect-[16/10] max-h-[420px] w-full rounded-xl object-cover"
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={current.url}
-            alt={current.caption ?? altFallback}
-            className="aspect-[16/10] max-h-[420px] w-full rounded-xl object-cover"
-            loading="lazy"
-          />
-        )}
+        <div className={mediaFrame}>{media}</div>
         {current.caption && (
           <figcaption className="px-2 py-2 text-center text-sm font-medium text-ink-soft">
             {current.caption}
@@ -74,25 +84,8 @@ export function MediaCarousel({
       />
       <figure className="photo-frame relative bg-card p-2 shadow-[var(--shadow-card)]">
         <div className="relative overflow-hidden rounded-xl">
-          {current.isVideo ? (
-            <video
-              key={current.id}
-              src={current.url}
-              controls
-              className="aspect-[16/10] max-h-[420px] w-full object-cover"
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={current.id}
-              src={current.url}
-              alt={current.caption ?? altFallback}
-              className="aspect-[16/10] max-h-[420px] w-full object-cover transition duration-300"
-              loading="lazy"
-            />
-          )}
+          <div className={mediaFrame}>{media}</div>
 
-          {/* Soft scrims keep controls readable on busy photos */}
           <div
             className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-black/45 to-transparent"
             aria-hidden

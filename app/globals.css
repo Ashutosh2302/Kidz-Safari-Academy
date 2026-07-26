@@ -101,16 +101,17 @@ body {
     transform: scale(1) translate(0%, 0%);
   }
   to {
-    transform: scale(1.12) translate(-2.5%, -1.5%);
+    /* Gentle drift — starts uncropped with object-contain */
+    transform: scale(1.05) translate(-1.2%, -0.8%);
   }
 }
 
 @keyframes ken-burns-b {
   from {
-    transform: scale(1.08) translate(-1%, 1%);
+    transform: scale(1) translate(0%, 0%);
   }
   to {
-    transform: scale(1.18) translate(2%, -2%);
+    transform: scale(1.06) translate(1.2%, -0.8%);
   }
 }
 

@@ -7,7 +7,7 @@ import {
 import { ViewMoreLeapsButton } from "@/components/ParentExtrasModals";
 import { ShareUpdate } from "@/components/ShareUpdate";
 import { hoursOfPlayLabel, screenFreeHoursLabel } from "@/lib/copy";
-import type { MemoryLanePhoto } from "@/lib/memory-lane";
+import type { MemoryLaneMedia } from "@/lib/memory-lane";
 
 export type LeapHighlight = {
   id: string;
@@ -35,7 +35,7 @@ export function ParentThisWeek({
   milestones: LeapHighlight[];
   totalLeapCount: number;
   joinedOn: string;
-  memoryPhotos: MemoryLanePhoto[];
+  memoryPhotos: MemoryLaneMedia[];
 }) {
   const fill = Math.min(100, (weekHours / Math.max(weekTarget, 1)) * 100);
   const plantHeight = fill;
