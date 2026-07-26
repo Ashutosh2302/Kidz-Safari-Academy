@@ -2,30 +2,39 @@ import { redirect } from "next/navigation";
 import { logoutTeacher } from "@/app/actions/auth";
 import { AdminNav } from "@/components/AdminNav";
 import { DashDivider } from "@/components/DashDivider";
+import { EmptyState } from "@/components/EmptyState";
 import { MediaStudio } from "@/components/MediaStudio";
 import { isTeacherAuthed } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
+import { activeStudentWhere } from "@/lib/students";
 
 export default async function MediaPage() {
+  return timed("page:admin/media", async () => {
   if (!(await isTeacherAuthed())) {
     redirect("/admin/login");
   }
 
-  const [students, unassigned, recentAssigned] = await Promise.all([
-    prisma.student.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.mediaAsset.findMany({
-      where: { assignedAt: null },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.mediaAsset.findMany({
-      where: { assignedAt: { not: null } },
-      orderBy: { assignedAt: "desc" },
-      take: 12,
-    }),
-  ]);
+  const [students, unassigned, recentAssigned] = await timed(
+    "query:admin/media:bundle",
+    () =>
+      Promise.all([
+        prisma.student.findMany({
+          where: activeStudentWhere,
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+        prisma.mediaAsset.findMany({
+          where: { assignedAt: null },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.mediaAsset.findMany({
+          where: { assignedAt: { not: null } },
+          orderBy: { assignedAt: "desc" },
+          take: 12,
+        }),
+      ]),
+  );
 
   const serialize = (items: typeof unassigned) =>
     items.map((m) => ({
@@ -62,11 +71,22 @@ export default async function MediaPage() {
       <DashDivider className="!my-4" />
       <AdminNav current="/admin/media" />
 
-      <MediaStudio
-        students={students}
-        unassigned={serialize(unassigned)}
-        recentAssigned={serialize(recentAssigned)}
-      />
+      {students.length === 0 ? (
+        <EmptyState
+          icon="📷"
+          title="Nowhere to send photos yet"
+          description="Add a student first — then you can upload moments and tag them onto each child’s timeline."
+          actionHref="/admin/students/new"
+          actionLabel="+ New student"
+        />
+      ) : (
+        <MediaStudio
+          students={students}
+          unassigned={serialize(unassigned)}
+          recentAssigned={serialize(recentAssigned)}
+        />
+      )}
     </main>
   );
+  });
 }

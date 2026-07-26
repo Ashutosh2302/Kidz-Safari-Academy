@@ -38,6 +38,8 @@ model Student {
   enrolledOn     DateTime           @default(now())
   /// Per-student monthly fee — copied onto each new fee cycle as amountDue
   monthlyFee     Int                @default(0)
+  /// Soft-remove from active roster; history (sessions, fees, leaps) is kept
+  archivedAt     DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @default(now()) @updatedAt
   sessions       Session[]
@@ -48,6 +50,7 @@ model Student {
 
   @@index([magicLinkToken])
   @@index([enrolledOn])
+  @@index([archivedAt])
   @@map("students")
 }
 

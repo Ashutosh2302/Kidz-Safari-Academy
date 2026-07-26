@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import Link, { useLinkStatus } from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 
 const links = [
@@ -9,6 +11,24 @@ const links = [
   { href: "/admin/fees", label: "Fees" },
   { href: "/admin/milestones", label: "Leaps" },
 ] as const;
+
+function NavPendingHint() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden
+      className={`ml-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-forest transition-opacity duration-150 ${
+        pending ? "animate-pulse opacity-100" : "opacity-0"
+      }`}
+      style={
+        pending
+          ? undefined
+          : // Debounce flash on fast navigations (see Next.js useLinkStatus docs)
+            { animationDelay: "100ms" }
+      }
+    />
+  );
+}
 
 export function AdminNav({ current }: { current: string }) {
   return (
@@ -24,7 +44,7 @@ export function AdminNav({ current }: { current: string }) {
           </p>
         </div>
       </div>
-      <nav className="flex flex-wrap gap-2">
+      <nav className="flex flex-wrap gap-2" aria-label="Teacher desk">
         {links.map((link) => {
           const active =
             link.href === "/admin"
@@ -36,11 +56,12 @@ export function AdminNav({ current }: { current: string }) {
               href={link.href}
               className={
                 active
-                  ? "pill-yellow"
-                  : "rounded-full border-2 border-forest bg-white px-3 py-1.5 text-sm font-bold text-forest"
+                  ? "pill-yellow inline-flex items-center"
+                  : "inline-flex items-center rounded-full border-2 border-forest bg-white px-3 py-1.5 text-sm font-bold text-forest"
               }
             >
               {link.label}
+              <NavPendingHint />
             </Link>
           );
         })}

@@ -30,6 +30,15 @@ export async function createSession(input: CreateSessionInput) {
   if (!input.studentId) {
     return { error: "Pick a little one first." };
   }
+
+  const student = await prisma.student.findUnique({
+    where: { id: input.studentId },
+    select: { id: true, archivedAt: true, magicLinkToken: true },
+  });
+  if (!student || student.archivedAt) {
+    return { error: "That student isn’t on the active roster." };
+  }
+
   if (!notes) {
     return { error: "Add a short note about today’s class." };
   }

@@ -96,3 +96,58 @@ export async function updateStudent(formData: FormData) {
   revalidateParentPortal(student.magicLinkToken);
   redirect(`/admin/students/${id}`);
 }
+
+export async function archiveStudent(studentId: string) {
+  if (!(await isTeacherAuthed())) {
+    return { error: "Please sign in first." };
+  }
+  if (!studentId) return { error: "Missing student." };
+
+  const student = await prisma.student.findUnique({ where: { id: studentId } });
+  if (!student) return { error: "Student not found." };
+  if (student.archivedAt) return { success: true };
+
+  await prisma.student.update({
+    where: { id: studentId },
+    data: { archivedAt: new Date() },
+  });
+
+  revalidatePath("/admin/students");
+  revalidatePath(`/admin/students/${studentId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/attendance");
+  revalidatePath("/admin/fees");
+  revalidatePath("/admin/media");
+  revalidatePath("/admin/milestones");
+  revalidateParentPortal(student.magicLinkToken);
+  return { success: true };
+}
+
+export async function restoreStudent(studentId: string) {
+  if (!(await isTeacherAuthed())) {
+    return { error: "Please sign in first." };
+  }
+  if (!studentId) return { error: "Missing student." };
+
+  const student = await prisma.student.findUnique({ where: { id: studentId } });
+  if (!student) return { error: "Student not found." };
+
+  await prisma.student.update({
+    where: { id: studentId },
+    data: { archivedAt: null },
+  });
+
+  if (student.monthlyFee > 0) {
+    await ensureFeeCyclesUpToDate(studentId);
+  }
+
+  revalidatePath("/admin/students");
+  revalidatePath(`/admin/students/${studentId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/attendance");
+  revalidatePath("/admin/fees");
+  revalidatePath("/admin/media");
+  revalidatePath("/admin/milestones");
+  revalidateParentPortal(student.magicLinkToken);
+  return { success: true };
+}

@@ -3,15 +3,19 @@ import { logoutTeacher } from "@/app/actions/auth";
 import { AdminNav } from "@/components/AdminNav";
 import { AttendanceBoard } from "@/components/AttendanceBoard";
 import { DashDivider } from "@/components/DashDivider";
+import { EmptyState } from "@/components/EmptyState";
 import { isTeacherAuthed } from "@/lib/auth";
 import { parseDateOnly, toDateInputValue } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
+import { activeStudentWhere } from "@/lib/students";
 
 export default async function AttendancePage({
   searchParams,
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
+  return timed("page:admin/attendance", async () => {
   if (!(await isTeacherAuthed())) {
     redirect("/admin/login");
   }
@@ -22,15 +26,18 @@ export default async function AttendancePage({
     : toDateInputValue();
   const dateObj = parseDateOnly(date);
 
-  const students = await prisma.student.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      attendance: {
-        where: { date: dateObj },
-        take: 1,
+  const students = await timed("query:admin/attendance:board", () =>
+    prisma.student.findMany({
+      where: activeStudentWhere,
+      orderBy: { name: "asc" },
+      include: {
+        attendance: {
+          where: { date: dateObj },
+          take: 1,
+        },
       },
-    },
-  });
+    }),
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -57,17 +64,28 @@ export default async function AttendancePage({
       <DashDivider className="!my-4" />
       <AdminNav current="/admin/attendance" />
 
-      <AttendanceBoard
-        key={date}
-        initialDate={date}
-        students={students.map((s) => ({
-          id: s.id,
-          name: s.name,
-          status: s.attendance[0]?.status ?? null,
-          note: s.attendance[0]?.note ?? null,
-          hoursAttended: s.attendance[0]?.hoursAttended ?? null,
-        }))}
-      />
+      {students.length === 0 ? (
+        <EmptyState
+          icon="☀️"
+          title="No roster to mark yet"
+          description="Add your first student, then you can take attendance for each class day here."
+          actionHref="/admin/students/new"
+          actionLabel="+ New student"
+        />
+      ) : (
+        <AttendanceBoard
+          key={date}
+          initialDate={date}
+          students={students.map((s) => ({
+            id: s.id,
+            name: s.name,
+            status: s.attendance[0]?.status ?? null,
+            note: s.attendance[0]?.note ?? null,
+            hoursAttended: s.attendance[0]?.hoursAttended ?? null,
+          }))}
+        />
+      )}
     </main>
   );
+  });
 }

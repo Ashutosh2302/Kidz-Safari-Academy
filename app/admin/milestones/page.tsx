@@ -2,25 +2,36 @@ import { redirect } from "next/navigation";
 import { logoutTeacher } from "@/app/actions/auth";
 import { AdminNav } from "@/components/AdminNav";
 import { DashDivider } from "@/components/DashDivider";
+import { EmptyState } from "@/components/EmptyState";
 import { MilestoneBoard } from "@/components/MilestoneBoard";
 import { isTeacherAuthed } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
+import { activeStudentWhere } from "@/lib/students";
 
 export default async function MilestonesPage() {
+  return timed("page:admin/milestones", async () => {
   if (!(await isTeacherAuthed())) {
     redirect("/admin/login");
   }
 
-  const [students, milestones, unlocked] = await Promise.all([
-    prisma.student.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.milestone.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
-    prisma.studentMilestone.findMany({
-      select: { studentId: true, milestoneId: true, note: true },
-    }),
-  ]);
+  const [students, milestones, unlocked] = await timed(
+    "query:admin/milestones:bundle",
+    () =>
+      Promise.all([
+        prisma.student.findMany({
+          where: activeStudentWhere,
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+        prisma.milestone.findMany({
+          orderBy: [{ category: "asc" }, { name: "asc" }],
+        }),
+        prisma.studentMilestone.findMany({
+          select: { studentId: true, milestoneId: true, note: true },
+        }),
+      ]),
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -47,11 +58,22 @@ export default async function MilestonesPage() {
       <DashDivider className="!my-4" />
       <AdminNav current="/admin/milestones" />
 
-      <MilestoneBoard
-        students={students}
-        milestones={milestones}
-        unlocked={unlocked}
-      />
+      {students.length === 0 ? (
+        <EmptyState
+          icon="🦋"
+          title="Leaps need a little explorer"
+          description="Enroll a student to unlock leaps after class — growth moments parents love to see."
+          actionHref="/admin/students/new"
+          actionLabel="+ New student"
+        />
+      ) : (
+        <MilestoneBoard
+          students={students}
+          milestones={milestones}
+          unlocked={unlocked}
+        />
+      )}
     </main>
   );
+  });
 }

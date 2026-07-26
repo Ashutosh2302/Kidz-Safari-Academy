@@ -61,6 +61,22 @@ export default async function ParentPortalPage({
     notFound();
   }
 
+  if (student.archivedAt) {
+    const name = firstName(student.name);
+    return (
+      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-16 text-center">
+        <BrandLogo height={64} />
+        <h1 className="mt-8 font-display text-3xl font-bold text-forest">
+          {name} is no longer enrolled
+        </h1>
+        <p className="mt-3 text-ink-soft">
+          This Gentle Sprouts journey has paused. If you think this is a
+          mistake, please reach out to the academy.
+        </p>
+      </main>
+    );
+  }
+
   const name = firstName(student.name);
   const sessionCount = distinctSessionDayCount(student.sessions);
   const photoCount = student.sessions.reduce(

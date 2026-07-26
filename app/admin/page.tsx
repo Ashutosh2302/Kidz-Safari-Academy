@@ -3,19 +3,26 @@ import { redirect } from "next/navigation";
 import { logoutTeacher } from "@/app/actions/auth";
 import { AdminNav } from "@/components/AdminNav";
 import { DashDivider } from "@/components/DashDivider";
+import { EmptyState } from "@/components/EmptyState";
 import { SessionLogForm } from "@/components/SessionLogForm";
 import { isTeacherAuthed } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
+import { activeStudentWhere } from "@/lib/students";
 
 export default async function AdminPage() {
+  return timed("page:admin/notes", async () => {
   if (!(await isTeacherAuthed())) {
     redirect("/admin/login");
   }
 
-  const students = await prisma.student.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const students = await timed("query:admin/notes:students", () =>
+    prisma.student.findMany({
+      where: activeStudentWhere,
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
@@ -46,19 +53,20 @@ export default async function AdminPage() {
       <DashDivider className="!my-4" />
       <AdminNav current="/admin" />
 
-      <div className="surface-card animate-fade-up p-5 sm:p-7">
-        {students.length === 0 ? (
-          <p className="text-ink-soft">
-            No students yet.{" "}
-            <a href="/admin/students/new" className="font-bold text-forest underline">
-              Enroll the first child
-            </a>
-            .
-          </p>
-        ) : (
+      {students.length === 0 ? (
+        <EmptyState
+          icon="📝"
+          title="No one to write about yet"
+          description="Enroll a student first, then come back here to jot a warm note after class."
+          actionHref="/admin/students/new"
+          actionLabel="+ New student"
+        />
+      ) : (
+        <div className="surface-card animate-fade-up p-5 sm:p-7">
           <SessionLogForm students={students} />
-        )}
-      </div>
+        </div>
+      )}
     </main>
   );
+  });
 }

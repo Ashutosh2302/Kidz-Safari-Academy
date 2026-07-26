@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { updateStudent } from "@/app/actions/students";
 import { AdminNav } from "@/components/AdminNav";
+import { ArchiveStudentButton } from "@/components/ArchiveStudentButton";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DashDivider } from "@/components/DashDivider";
 import { PortraitPhotoField } from "@/components/PortraitPhotoField";
@@ -15,6 +16,8 @@ import {
 import { ensureFeeCyclesUpToDate } from "@/lib/fees";
 import { parentPortalUrl } from "@/lib/magic-link";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
+import { activeStudentWhere, isStudentArchived } from "@/lib/students";
 
 function utcDateInput(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -25,6 +28,7 @@ export default async function StudentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  return timed("page:admin/students/[id]", async () => {
   if (!(await isTeacherAuthed())) {
     redirect("/admin/login");
   }
@@ -32,29 +36,35 @@ export default async function StudentDetailPage({
   const { id } = await params;
   await ensureFeeCyclesUpToDate(id);
 
-  const student = await prisma.student.findUnique({
-    where: { id },
-    include: {
-      feeCycles: {
-        orderBy: { periodStart: "desc" },
+  const [student, peers] = await timed("query:admin/students/[id]", () =>
+    Promise.all([
+      prisma.student.findUnique({
+        where: { id },
         include: {
-          payments: { orderBy: { paidAt: "desc" } },
+          feeCycles: {
+            orderBy: { periodStart: "desc" },
+            include: {
+              payments: { orderBy: { paidAt: "desc" } },
+            },
+          },
+          attendance: { orderBy: { date: "desc" }, take: 10 },
+          milestones: {
+            include: { milestone: true },
+            orderBy: { achievedDate: "desc" },
+          },
+          _count: { select: { sessions: true } },
         },
-      },
-      attendance: { orderBy: { date: "desc" }, take: 10 },
-      milestones: {
-        include: { milestone: true },
-        orderBy: { achievedDate: "desc" },
-      },
-      _count: { select: { sessions: true } },
-    },
-  });
+      }),
+      prisma.student.findMany({
+        where: activeStudentWhere,
+        select: { id: true, name: true },
+      }),
+    ]),
+  );
 
   if (!student) notFound();
 
-  const peers = await prisma.student.findMany({
-    select: { id: true, name: true },
-  });
+  const archived = isStudentArchived(student);
   const url = parentPortalUrl(student, peers);
 
   return (
@@ -68,16 +78,36 @@ export default async function StudentDetailPage({
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold text-forest">
-            {student.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-3xl font-bold text-forest">
+              {student.name}
+            </h1>
+            {archived ? (
+              <span className="rounded-full bg-pastel-pink px-2.5 py-1 text-xs font-bold text-red-deep">
+                Archived
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-ink-soft">
             Enrolled {formatDisplayDate(student.enrolledOn)} ·{" "}
             {student._count.sessions} sessions logged
+            {archived && student.archivedAt
+              ? ` · archived ${formatDisplayDate(student.archivedAt)}`
+              : ""}
           </p>
         </div>
-        <CopyLinkButton url={url} />
+        {!archived ? <CopyLinkButton url={url} /> : null}
       </div>
+
+      {archived ? (
+        <div className="mt-4 rounded-[1.25rem] border-2 border-forest bg-pastel-pink/40 px-4 py-3 text-sm text-forest">
+          <p className="font-bold">Removed from the active roster</p>
+          <p className="mt-1 text-ink-soft">
+            History is preserved. The parent magic link is paused until you
+            restore this student.
+          </p>
+        </div>
+      ) : null}
 
       <DashDivider className="!my-4" />
       <AdminNav current="/admin/students" />
@@ -150,7 +180,17 @@ export default async function StudentDetailPage({
           <button type="submit" className="btn-secondary w-full !py-2.5">
             Save profile
           </button>
-          <p className="truncate text-xs text-forest-soft">{url}</p>
+          {!archived ? (
+            <p className="truncate text-xs text-forest-soft">{url}</p>
+          ) : null}
+
+          <div className="border-t-2 border-dashed border-forest/15 pt-3">
+            <ArchiveStudentButton
+              studentId={student.id}
+              studentName={student.name}
+              archived={archived}
+            />
+          </div>
         </form>
 
         <div className="space-y-4">
@@ -279,4 +319,5 @@ export default async function StudentDetailPage({
       </div>
     </main>
   );
+  });
 }

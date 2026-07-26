@@ -5,7 +5,7 @@ import { PrismaClient } from "../generated/prisma/client";
  * Bump this after migrations that add models/fields so the Next.js
  * global Prisma singleton is discarded in development.
  */
-const PRISMA_SCHEMA_REV = 10;
+const PRISMA_SCHEMA_REV = 11;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -16,6 +16,20 @@ function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set");
+  }
+
+  // Neon serverless: use the pooled host (*-pooler.*) — direct connections
+  // add real per-request latency under Vercel cold starts.
+  if (
+    process.env.NODE_ENV === "production" &&
+    /neon\.tech/i.test(connectionString) &&
+    !/-pooler\./i.test(connectionString)
+  ) {
+    console.warn(
+      "[prisma] DATABASE_URL looks like a Neon direct (unpooled) host. " +
+        "Prefer the connection string whose hostname contains “-pooler” " +
+        "(Neon dashboard → Connection details → Pooled connection).",
+    );
   }
 
   const adapter = new PrismaPg({ connectionString });

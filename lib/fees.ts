@@ -1,6 +1,7 @@
 import { parseDateOnly, toDateInputValue } from "@/lib/dates";
 import { resolveFeeStatus } from "@/lib/fee-display";
 import { prisma } from "@/lib/prisma";
+import { timed } from "@/lib/server-timing";
 
 export {
   feeStatusBadgeClass,
@@ -65,55 +66,104 @@ export function feeCycleContaining(enrolledOn: Date, asOf: Date) {
 /**
  * Ensure every student with a monthly fee has cycles from join date
  * through the cycle that covers today.
+ *
+ * Batches reads + creates to avoid a per-cycle round-trip waterfall
+ * (critical on serverless / Neon cold starts).
  */
 export async function ensureFeeCyclesUpToDate(studentId?: string) {
-  const students = await prisma.student.findMany({
-    where: {
-      monthlyFee: { gt: 0 },
-      ...(studentId ? { id: studentId } : {}),
-    },
-    select: { id: true, monthlyFee: true, enrolledOn: true },
-  });
+  return timed("query:ensureFeeCycles", async () => {
+    const students = await prisma.student.findMany({
+      where: {
+        monthlyFee: { gt: 0 },
+        archivedAt: null,
+        ...(studentId ? { id: studentId } : {}),
+      },
+      select: { id: true, monthlyFee: true, enrolledOn: true },
+    });
 
-  if (students.length === 0) return;
+    if (students.length === 0) return;
 
-  const today = parseDateOnly(toDateInputValue());
+    const today = parseDateOnly(toDateInputValue());
+    const studentIds = students.map((s) => s.id);
 
-  for (const student of students) {
-    const join = utcDateOnly(student.enrolledOn);
-    const joinDay = join.getUTCDate();
-    let start = join;
+    const existing = await prisma.feeCycle.findMany({
+      where: { studentId: { in: studentIds } },
+      select: { studentId: true, periodStart: true },
+    });
 
-    for (let i = 0; i < 600; i += 1) {
-      const next = nextCycleStart(start, joinDay);
-      const end = dayBefore(next);
+    const existingKeys = new Set(
+      existing.map(
+        (c) => `${c.studentId}:${c.periodStart.toISOString()}`,
+      ),
+    );
 
-      await prisma.feeCycle.upsert({
-        where: {
-          studentId_periodStart: {
+    const toCreate: {
+      studentId: string;
+      periodStart: Date;
+      periodEnd: Date;
+      amountDue: number;
+      amountPaid: number;
+      status: "DUE";
+    }[] = [];
+
+    for (const student of students) {
+      const join = utcDateOnly(student.enrolledOn);
+      const joinDay = join.getUTCDate();
+      let start = join;
+
+      for (let i = 0; i < 600; i += 1) {
+        const next = nextCycleStart(start, joinDay);
+        const end = dayBefore(next);
+        const key = `${student.id}:${start.toISOString()}`;
+        if (!existingKeys.has(key)) {
+          toCreate.push({
             studentId: student.id,
             periodStart: start,
-          },
-        },
-        create: {
-          studentId: student.id,
-          periodStart: start,
-          periodEnd: end,
-          amountDue: student.monthlyFee,
-          amountPaid: 0,
-          status: "DUE",
-        },
-        update: {},
-      });
-
-      // Stop once today's cycle exists
-      if (end >= today) break;
-      start = next;
+            periodEnd: end,
+            amountDue: student.monthlyFee,
+            amountPaid: 0,
+            status: "DUE",
+          });
+        }
+        if (end >= today) break;
+        start = next;
+      }
     }
 
-    // Keep open cycles in sync with the student's current monthly fee
-    await syncOpenCycleAmountDue(student.id, student.monthlyFee);
-  }
+    if (toCreate.length > 0) {
+      await prisma.feeCycle.createMany({
+        data: toCreate,
+        skipDuplicates: true,
+      });
+    }
+
+    // One read for all open cycles, then parallel updates only where fee changed
+    const openCycles = await prisma.feeCycle.findMany({
+      where: {
+        studentId: { in: studentIds },
+        status: { in: ["DUE", "PARTIAL"] },
+      },
+      include: { payments: true },
+    });
+
+    const feeByStudent = new Map(students.map((s) => [s.id, s.monthlyFee]));
+    const updates = openCycles
+      .map((cycle) => {
+        const monthlyFee = feeByStudent.get(cycle.studentId);
+        if (monthlyFee == null || cycle.amountDue === monthlyFee) return null;
+        const amountPaid = cycle.payments.reduce((sum, p) => sum + p.amount, 0);
+        const status = resolveFeeStatus(monthlyFee, amountPaid, false);
+        return prisma.feeCycle.update({
+          where: { id: cycle.id },
+          data: { amountDue: monthlyFee, amountPaid, status },
+        });
+      })
+      .filter((u): u is NonNullable<typeof u> => u != null);
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+  });
 }
 
 /**
@@ -132,16 +182,19 @@ export async function syncOpenCycleAmountDue(
     include: { payments: true },
   });
 
-  for (const cycle of openCycles) {
-    if (cycle.amountDue === monthlyFee) continue;
-
-    const amountPaid = cycle.payments.reduce((sum, p) => sum + p.amount, 0);
-    const status = resolveFeeStatus(monthlyFee, amountPaid, false);
-
-    await prisma.feeCycle.update({
-      where: { id: cycle.id },
-      data: { amountDue: monthlyFee, amountPaid, status },
+  const updates = openCycles
+    .filter((cycle) => cycle.amountDue !== monthlyFee)
+    .map((cycle) => {
+      const amountPaid = cycle.payments.reduce((sum, p) => sum + p.amount, 0);
+      const status = resolveFeeStatus(monthlyFee, amountPaid, false);
+      return prisma.feeCycle.update({
+        where: { id: cycle.id },
+        data: { amountDue: monthlyFee, amountPaid, status },
+      });
     });
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
   }
 }
 

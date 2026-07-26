@@ -181,9 +181,21 @@ export function MediaStudio({
             items can be sent to more children.
           </p>
           {library.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-soft">
-              No media yet. Upload above to get started.
-            </p>
+            <div className="mt-4 flex flex-col items-center rounded-[1.25rem] border-2 border-dashed border-forest/25 bg-mint/30 px-6 py-10 text-center">
+              <span
+                className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-forest bg-cream text-2xl shadow-[2px_2px_0_rgba(0,0,0,0.12)]"
+                aria-hidden
+              >
+                📷
+              </span>
+              <h3 className="mt-4 font-display text-xl font-bold text-forest">
+                No photos yet
+              </h3>
+              <p className="mt-1 max-w-sm text-sm text-ink-soft">
+                Upload a few moments from class above, then tag children to
+                send them to parent timelines.
+              </p>
+            </div>
           ) : (
             <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {library.map((item) => {

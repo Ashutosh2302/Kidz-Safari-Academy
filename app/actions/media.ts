@@ -55,7 +55,7 @@ export async function assignMediaToStudents(input: {
       where: { id: { in: input.mediaIds } },
     }),
     prisma.student.findMany({
-      where: { id: { in: input.studentIds } },
+      where: { id: { in: input.studentIds }, archivedAt: null },
     }),
   ]);
 

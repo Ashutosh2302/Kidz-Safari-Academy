@@ -67,6 +67,14 @@ export async function toggleStudentMilestone(input: {
     return { error: "Please sign in first." };
   }
 
+  const active = await prisma.student.findFirst({
+    where: { id: input.studentId, archivedAt: null },
+    select: { id: true },
+  });
+  if (!active) {
+    return { error: "That student isn’t on the active roster." };
+  }
+
   if (input.achieved) {
     const note = input.note?.trim() || null;
     if (!note) {
