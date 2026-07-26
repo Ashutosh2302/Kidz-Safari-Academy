@@ -56,7 +56,6 @@ export function MemoryLane({
     setRange("week");
     setIndex(0);
     setMuted(false);
-    void ensureSound();
   }
 
   function startPlayback(nextRange: MemoryLaneRange) {
@@ -64,7 +63,7 @@ export function MemoryLane({
     setIndex(0);
     setKenKey((k) => k + 1);
     setPhase("play");
-    if (!muted) void ensureSound();
+    void ensureSound();
   }
 
   function closeAll() {
