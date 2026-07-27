@@ -2,10 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { isTeacherAuthed } from "@/lib/auth";
-import {
-  ACTIVITY_CATEGORIES,
-  isActivityCategory,
-} from "@/lib/copy";
 import { prisma } from "@/lib/prisma";
 import { revalidateParentPortal } from "@/lib/revalidate-parent";
 import {
@@ -47,10 +43,7 @@ export async function createSession(input: CreateSessionInput) {
     return { error: "That date doesn’t look right." };
   }
 
-  const rawCategory = input.activityCategory ?? "";
-  const activityCategory = isActivityCategory(rawCategory)
-    ? rawCategory
-    : ACTIVITY_CATEGORIES[0];
+  const activityCategory = (input.activityCategory ?? "").trim() || undefined;
 
   const session = await prisma.$transaction(async (tx) => {
     const daySession = await findOrUpsertSessionForDay(tx, {

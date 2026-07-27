@@ -92,15 +92,3 @@ export const LEAP_ICONS = [
   "🦋",
 ] as const;
 
-export const ACTIVITY_CATEGORIES = [
-  "Circle Time",
-  "Art",
-  "Outdoor",
-  "Story",
-] as const;
-
-export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number];
-
-export function isActivityCategory(value: string): value is ActivityCategory {
-  return (ACTIVITY_CATEGORIES as readonly string[]).includes(value);
-}

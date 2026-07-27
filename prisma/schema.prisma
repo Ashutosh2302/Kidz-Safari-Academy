@@ -60,8 +60,8 @@ model Session {
   student          Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
   sessionDate      DateTime
   notes            String
-  /// Parent-facing activity tag: Circle Time / Art / Outdoor / Story
-  activityCategory String         @default("Circle Time")
+  /// Optional parent-facing activity label (from teacher-created Activities)
+  activityCategory String?
   createdBy        String         @default("teacher")
   createdAt        DateTime       @default(now())
   photos           SessionPhoto[]
@@ -70,6 +70,17 @@ model Session {
   @@index([studentId])
   @@index([sessionDate])
   @@map("sessions")
+}
+
+/// Teacher-defined activity labels for session tagging
+model Activity {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([name])
+  @@map("activities")
 }
 
 model SessionPhoto {

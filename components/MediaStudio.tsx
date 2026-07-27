@@ -1,15 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
-  assignMediaToStudents,
   deleteMediaAsset,
+  publishSessionDay,
   toggleMediaHighlight,
+  untagMediaFromStudents,
 } from "@/app/actions/media";
+import {
+  ActivityPicker,
+  type ActivityOption,
+} from "@/components/ActivityPicker";
 import { StudentMultiSelect } from "@/components/StudentMultiSelect";
-import { ACTIVITY_CATEGORIES, type ActivityCategory } from "@/lib/copy";
 import { toDateInputValue } from "@/lib/dates";
+
+type TaggedStudent = { id: string; name: string };
 
 type MediaItem = {
   id: string;
@@ -19,6 +26,7 @@ type MediaItem = {
   createdAt: string;
   assignedAt: string | null;
   isHighlight: boolean;
+  taggedStudents: TaggedStudent[];
 };
 
 type Student = { id: string; name: string };
@@ -27,10 +35,12 @@ export function MediaStudio({
   students,
   unassigned,
   recentAssigned,
+  initialActivities,
 }: {
   students: Student[];
   unassigned: MediaItem[];
   recentAssigned: MediaItem[];
+  initialActivities: ActivityOption[];
 }) {
   const router = useRouter();
   // Default: all children selected — easiest after-class flow
@@ -43,12 +53,24 @@ export function MediaStudio({
     "{name} had a lovely moment in class today",
   );
   const [sessionNote, setSessionNote] = useState("");
-  const [activityCategory, setActivityCategory] =
-    useState<ActivityCategory>("Circle Time");
+  const [activities, setActivities] =
+    useState<ActivityOption[]>(initialActivities);
+  const [activityCategory, setActivityCategory] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setActivities(initialActivities);
+  }, [initialActivities]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [managingTagsMediaId, setManagingTagsMediaId] = useState<string | null>(
+    null,
+  );
+  const [untagStudentIds, setUntagStudentIds] = useState<string[]>([]);
+  const [conflictSessions, setConflictSessions] = useState<
+    { id: string; studentId: string; studentName: string }[]
+  >([]);
 
   // Keep already-tagged media selectable so you can add more children later
   const library = useMemo(() => {
@@ -61,16 +83,39 @@ export function MediaStudio({
     );
   }, [unassigned, recentAssigned]);
 
+  const managingItem = useMemo(
+    () => library.find((item) => item.id === managingTagsMediaId) ?? null,
+    [library, managingTagsMediaId],
+  );
+
+  useEffect(() => {
+    if (!managingItem) {
+      setUntagStudentIds([]);
+      return;
+    }
+    const valid = new Set(managingItem.taggedStudents.map((s) => s.id));
+    setUntagStudentIds((prev) => prev.filter((id) => valid.has(id)));
+  }, [managingItem]);
+
   const previewName = useMemo(() => {
     const s = students.find((x) => selectedStudents.includes(x.id));
     return s?.name ?? students[0]?.name ?? "Aarav";
   }, [students, selectedStudents]);
 
-  const captionPreview = captionTemplate
-    .replaceAll("{student name}", previewName)
-    .replaceAll("{studentName}", previewName)
-    .replaceAll("{name}", previewName.split(/\s+/)[0] ?? previewName)
-    .replaceAll("{firstName}", previewName.split(/\s+/)[0] ?? previewName);
+  const previewFirst = previewName.split(/\s+/)[0] ?? previewName;
+
+  function resolvePreview(template: string) {
+    return template
+      .replaceAll("{student name}", previewName)
+      .replaceAll("{studentName}", previewName)
+      .replaceAll("{name}", previewFirst)
+      .replaceAll("{firstName}", previewFirst);
+  }
+
+  const captionPreview = resolvePreview(captionTemplate);
+  const notePreview = sessionNote.trim()
+    ? resolvePreview(sessionNote)
+    : null;
 
   function toggleMedia(id: string) {
     setSelectedMedia((prev) =>
@@ -101,11 +146,16 @@ export function MediaStudio({
     }
   }
 
+  const canPublish =
+    selectedStudents.length > 0 &&
+    (selectedMedia.length > 0 || sessionNote.trim().length > 0);
+
   function onPublish() {
     setError(null);
     setMessage(null);
+    setConflictSessions([]);
     startTransition(async () => {
-      const result = await assignMediaToStudents({
+      const result = await publishSessionDay({
         mediaIds: selectedMedia,
         studentIds: selectedStudents,
         sessionDate,
@@ -115,16 +165,22 @@ export function MediaStudio({
       });
       if (result.error) {
         setError(result.error);
+        if ("conflict" in result && result.conflict) {
+          setConflictSessions(result.existingSessions ?? []);
+        }
         return;
       }
+      const assignedTo = result.assignedTo ?? selectedStudents.length;
+      const mediaCount = result.mediaCount ?? 0;
       const names = students
         .filter((s) => selectedStudents.includes(s.id))
         .map((s) => s.name.split(/\s+/)[0])
         .join(", ");
-      setMessage(
-        `Sent to ${result.assignedTo} children: ${names}. Open a magic link to check.`,
-      );
+      const mediaBit =
+        mediaCount > 0 ? ` with ${mediaCount} media` : " (notes only)";
+      setMessage(`Published to ${assignedTo} children${mediaBit}: ${names}.`);
       setSelectedMedia([]);
+      setSessionNote("");
       router.refresh();
     });
   }
@@ -152,6 +208,58 @@ export function MediaStudio({
     });
   }
 
+  function openTagManager(item: MediaItem) {
+    setError(null);
+    setMessage(null);
+    setManagingTagsMediaId(item.id);
+    setUntagStudentIds([]);
+  }
+
+  function closeTagManager() {
+    setManagingTagsMediaId(null);
+    setUntagStudentIds([]);
+  }
+
+  function toggleUntagStudent(id: string) {
+    setUntagStudentIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function onUntag(studentIds: string[]) {
+    if (!managingTagsMediaId || studentIds.length === 0) return;
+    setError(null);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await untagMediaFromStudents({
+        mediaId: managingTagsMediaId,
+        studentIds,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      const names = managingItem?.taggedStudents
+        .filter((s) => studentIds.includes(s.id))
+        .map((s) => s.name.split(/\s+/)[0])
+        .join(", ");
+      setMessage(
+        `Removed tag from ${result.removedFrom} ${
+          result.removedFrom === 1 ? "child" : "children"
+        }${names ? `: ${names}` : ""}.`,
+      );
+      setUntagStudentIds([]);
+      // Close if this media no longer has tags (will move to unassigned)
+      if (
+        !managingItem ||
+        managingItem.taggedStudents.every((s) => studentIds.includes(s.id))
+      ) {
+        closeTagManager();
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-4">
@@ -160,7 +268,8 @@ export function MediaStudio({
             {uploading ? "Uploading…" : "Drop photos & videos here"}
           </span>
           <span className="text-sm text-ink-soft">
-            Upload first — tag children after. jpg, png, webp, mp4 (up to 25MB)
+            Upload to the library, then include them in today’s session. jpg,
+            png, webp, mp4 (up to 25MB)
           </span>
           <input
             type="file"
@@ -174,11 +283,12 @@ export function MediaStudio({
 
         <div>
           <h2 className="font-display text-xl font-bold text-forest">
-            Media library ({library.length})
+            Photos & videos ({library.length})
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
-            Tap to select. Star standout shots for Memory Lane. Already-tagged
-            items can be sent to more children.
+            Tap to include in today’s session. Star standout shots for Memory
+            Lane. Tap <span className="font-bold text-forest">TAGGED</span> to
+            see or remove children.
           </p>
           {library.length === 0 ? (
             <div className="mt-4 flex flex-col items-center rounded-[1.25rem] border-2 border-dashed border-forest/25 bg-mint/30 px-6 py-10 text-center">
@@ -200,6 +310,7 @@ export function MediaStudio({
             <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {library.map((item) => {
                 const on = selectedMedia.includes(item.id);
+                const tagCount = item.taggedStudents.length;
                 return (
                   <li key={item.id} className="relative">
                     <button
@@ -253,9 +364,17 @@ export function MediaStudio({
                       </button>
                     )}
                     {item.assignedAt && (
-                      <span className="absolute bottom-2 left-2 rounded-full bg-forest px-2 py-0.5 text-[10px] font-bold text-yellow">
-                        TAGGED
-                      </span>
+                      <button
+                        type="button"
+                        title="See tagged children"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTagManager(item);
+                        }}
+                        className="absolute bottom-2 left-2 rounded-full bg-forest px-2 py-0.5 text-[10px] font-bold text-yellow shadow-sm transition hover:bg-forest-soft"
+                      >
+                        TAGGED{tagCount > 0 ? ` · ${tagCount}` : ""}
+                      </button>
                     )}
                     {item.kind === "video" && (
                       <span className="absolute bottom-2 right-2 rounded-full bg-red px-2 py-0.5 text-[10px] font-bold text-white">
@@ -270,13 +389,161 @@ export function MediaStudio({
         </div>
       </div>
 
+      {managingItem ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-forest/50 p-3 sm:items-center sm:p-6"
+          role="presentation"
+          onClick={closeTagManager}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manage-tags-title"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.75rem] border-4 border-forest bg-cream shadow-[var(--shadow-chunky)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-dashed border-forest bg-cream px-4 py-3">
+              <h2
+                id="manage-tags-title"
+                className="font-display text-lg font-bold text-forest"
+              >
+                Tagged children
+              </h2>
+              <button
+                type="button"
+                onClick={closeTagManager}
+                className="rounded-full border-2 border-forest bg-yellow px-3 py-1 text-sm font-bold text-forest"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="photo-frame mx-auto w-28 overflow-hidden p-1">
+                {managingItem.kind === "video" ? (
+                  <video
+                    src={managingItem.url}
+                    className="aspect-square w-full object-cover"
+                    muted
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={managingItem.url}
+                    alt={managingItem.originalName ?? "Class media"}
+                    className="aspect-square w-full object-cover"
+                  />
+                )}
+              </div>
+
+              {managingItem.taggedStudents.length === 0 ? (
+                <p className="text-center text-sm text-ink-soft">
+                  No children are tagged on this item anymore.
+                </p>
+              ) : (
+                <>
+                  <div className="rounded-2xl border-2 border-forest bg-cream p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-forest">
+                        On timelines (
+                        {managingItem.taggedStudents.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = managingItem.taggedStudents.map(
+                            (s) => s.id,
+                          );
+                          setUntagStudentIds((prev) =>
+                            prev.length === allIds.length ? [] : allIds,
+                          );
+                        }}
+                        className="text-xs font-bold text-forest-soft underline"
+                      >
+                        {untagStudentIds.length ===
+                        managingItem.taggedStudents.length
+                          ? "Clear selection"
+                          : "Select all"}
+                      </button>
+                    </div>
+                    <ul className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                      {managingItem.taggedStudents.map((s) => {
+                        const on = untagStudentIds.includes(s.id);
+                        return (
+                          <li key={s.id}>
+                            <div
+                              className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-sm font-semibold ${
+                                on
+                                  ? "bg-pastel-pink text-red-deep"
+                                  : "bg-white text-forest"
+                              }`}
+                            >
+                              <label className="flex min-w-0 cursor-pointer items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => toggleUntagStudent(s.id)}
+                                  className="h-4 w-4 accent-[var(--red)]"
+                                />
+                                <span className="truncate">{s.name}</span>
+                              </label>
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => onUntag([s.id])}
+                                className="shrink-0 rounded-full border border-forest/30 bg-cream px-2 py-0.5 text-[11px] font-bold text-forest hover:border-red hover:bg-pastel-pink hover:text-red-deep disabled:opacity-60"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      disabled={pending || untagStudentIds.length === 0}
+                      onClick={() => onUntag(untagStudentIds)}
+                      className="btn-primary w-full disabled:opacity-60"
+                    >
+                      {pending
+                        ? "Removing…"
+                        : untagStudentIds.length === 0
+                          ? "Select children to remove"
+                          : `Remove from ${untagStudentIds.length} ${
+                              untagStudentIds.length === 1
+                                ? "child"
+                                : "children"
+                            }`}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        onUntag(managingItem.taggedStudents.map((s) => s.id))
+                      }
+                      className="btn-secondary w-full !py-2.5 text-sm disabled:opacity-60"
+                    >
+                      Remove from everyone
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <aside className="surface-card h-fit space-y-4 p-5 lg:sticky lg:top-4">
         <h2 className="font-display text-xl font-bold text-forest">
-          Tag & send to timelines
+          Build today’s session
         </h2>
         <p className="text-sm text-ink-soft">
-          Select media on the left, confirm children (all selected by default),
-          then publish.
+          Pick children, add a note and/or photos from the library, then
+          publish to timelines.
         </p>
 
         <label className="block">
@@ -297,55 +564,86 @@ export function MediaStudio({
 
         <label className="block">
           <span className="mb-1 block text-sm font-bold text-forest">
-            Caption template
+            Session note
+            {selectedMedia.length === 0 ? (
+              <span className="font-semibold text-forest-soft">
+                {" "}
+                (required without media)
+              </span>
+            ) : (
+              <span className="font-semibold text-forest-soft">
+                {" "}
+                (optional)
+              </span>
+            )}
           </span>
           <textarea
-            value={captionTemplate}
-            onChange={(e) => setCaptionTemplate(e.target.value)}
-            rows={3}
-            className="input-field resize-none"
-            placeholder="{name} mixed colours with friends"
-          />
-          <span className="mt-1 block text-xs text-ink-soft">
-            Use {"{name}"} or {"{student name}"} — preview: “{captionPreview}”
-          </span>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-bold text-forest">
-            Activity
-          </span>
-          <select
-            value={activityCategory}
-            onChange={(e) =>
-              setActivityCategory(e.target.value as ActivityCategory)
-            }
-            className="input-field"
-          >
-            {ACTIVITY_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-bold text-forest">
-            Session note (optional)
-          </span>
-          <input
             value={sessionNote}
             onChange={(e) => setSessionNote(e.target.value)}
-            className="input-field"
-            placeholder="Used if the child has no note for that day yet"
+            rows={3}
+            className="input-field resize-none"
+            placeholder="{name} enjoyed today’s activity"
           />
+          <span className="mt-1 block text-xs text-ink-soft">
+            Use {"{name}"} or {"{student name}"}
+            {notePreview ? <> — preview: “{notePreview}”</> : null}
+          </span>
         </label>
 
-        {error && (
-          <p className="rounded-2xl border-2 border-red bg-pastel-pink px-3 py-2 text-sm font-semibold text-red-deep">
-            {error}
+        <ActivityPicker
+          activities={activities}
+          value={activityCategory}
+          onChange={setActivityCategory}
+          onActivitiesChange={setActivities}
+        />
+
+        {selectedMedia.length > 0 ? (
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold text-forest">
+              Photo caption template
+            </span>
+            <textarea
+              value={captionTemplate}
+              onChange={(e) => setCaptionTemplate(e.target.value)}
+              rows={2}
+              className="input-field resize-none"
+              placeholder="{name} mixed colours with friends"
+            />
+            <span className="mt-1 block text-xs text-ink-soft">
+              Use {"{name}"} or {"{student name}"} — preview: “{captionPreview}”
+            </span>
+          </label>
+        ) : null}
+
+        {selectedMedia.length > 0 ? (
+          <p className="text-xs font-semibold text-forest-soft">
+            {selectedMedia.length} media selected
           </p>
+        ) : (
+          <p className="text-xs text-ink-soft">
+            No media selected — publish with a note only, or tap photos on the
+            left.
+          </p>
+        )}
+
+        {error && (
+          <div className="space-y-2 rounded-2xl border-2 border-red bg-pastel-pink px-3 py-2 text-sm font-semibold text-red-deep">
+            <p>{error}</p>
+            {conflictSessions.length > 0 ? (
+              <ul className="mt-1 space-y-1.5">
+                {conflictSessions.map((s) => (
+                  <li key={s.id}>
+                    <Link
+                      href={`/admin/students/${s.studentId}/sessions`}
+                      className="font-bold underline"
+                    >
+                      Edit {s.studentName.split(/\s+/)[0]}’s sessions →
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         )}
         {message && (
           <p className="rounded-2xl border-2 border-forest bg-mint px-3 py-2 text-sm font-semibold text-forest">
@@ -355,15 +653,13 @@ export function MediaStudio({
 
         <button
           type="button"
-          disabled={
-            pending || selectedMedia.length === 0 || selectedStudents.length === 0
-          }
+          disabled={pending || !canPublish}
           onClick={onPublish}
           className="btn-primary w-full disabled:opacity-60"
         >
           {pending
-            ? "Sending…"
-            : `Send to ${selectedStudents.length} children`}
+            ? "Publishing…"
+            : `Publish to ${selectedStudents.length} children`}
         </button>
       </aside>
     </div>

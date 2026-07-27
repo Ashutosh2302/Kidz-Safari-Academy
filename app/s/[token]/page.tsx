@@ -259,11 +259,13 @@ export default async function ParentPortalPage({
                           </p>
                         )}
 
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span className="rounded-full bg-pastel-yellow px-2.5 py-1 text-xs font-bold text-forest">
-                            {session.activityCategory}
-                          </span>
-                        </div>
+                        {session.activityCategory ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-pastel-yellow px-2.5 py-1 text-xs font-bold text-forest">
+                              {session.activityCategory}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       {hasPhotos && (

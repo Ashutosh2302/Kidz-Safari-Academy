@@ -86,6 +86,22 @@ type UpsertArgs = {
   preferIncomingNotes?: boolean;
 };
 
+/** Existing session for a student on a UTC calendar day, if any. */
+export async function findSessionForStudentDay(
+  db: SessionDayClient,
+  studentId: string,
+  sessionDate: Date,
+) {
+  const { dayStart, dayEnd } = utcDayRange(sessionDate);
+  return db.session.findFirst({
+    where: {
+      studentId,
+      sessionDate: { gte: dayStart, lt: dayEnd },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 /**
  * One session per student per calendar day.
  * Finds an existing row for that UTC day, or creates one.
@@ -94,23 +110,20 @@ export async function findOrUpsertSessionForDay(
   db: SessionDayClient,
   args: UpsertArgs,
 ) {
-  const { dayStart, dayEnd } = utcDayRange(args.sessionDate);
-
-  const existing = await db.session.findFirst({
-    where: {
-      studentId: args.studentId,
-      sessionDate: { gte: dayStart, lt: dayEnd },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const existing = await findSessionForStudentDay(
+    db,
+    args.studentId,
+    args.sessionDate,
+  );
 
   if (!existing) {
+    const activity = args.activityCategory?.trim() || null;
     return db.session.create({
       data: {
         studentId: args.studentId,
         sessionDate: args.sessionDate,
         notes: (args.notes ?? "").trim() || PLACEHOLDER_SESSION_NOTE,
-        activityCategory: args.activityCategory ?? "Circle Time",
+        activityCategory: activity,
         createdBy: args.createdBy ?? "teacher",
       },
     });
@@ -122,11 +135,11 @@ export async function findOrUpsertSessionForDay(
 
   const data: Prisma.SessionUpdateInput = {};
   if (notes !== existing.notes) data.notes = notes;
-  if (
-    args.activityCategory &&
-    args.activityCategory !== existing.activityCategory
-  ) {
-    data.activityCategory = args.activityCategory;
+  if (args.activityCategory !== undefined) {
+    const nextActivity = args.activityCategory.trim() || null;
+    if (nextActivity !== existing.activityCategory) {
+      data.activityCategory = nextActivity;
+    }
   }
 
   if (Object.keys(data).length === 0) return existing;
@@ -135,4 +148,59 @@ export async function findOrUpsertSessionForDay(
     where: { id: existing.id },
     data,
   });
+}
+
+export function isPlaceholderSessionNote(notes: string) {
+  return !notes.trim() || notes.trim() === PLACEHOLDER_SESSION_NOTE;
+}
+
+/**
+ * Delete a session when it has no photos left and only a placeholder/empty note.
+ * Keeps sessions with real teacher-written notes.
+ */
+export async function deleteOrphanSessionIfEmpty(
+  db: SessionDayClient,
+  sessionId: string,
+) {
+  const session = await db.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      notes: true,
+      _count: { select: { photos: true } },
+    },
+  });
+  if (!session) return false;
+  if (session._count.photos > 0) return false;
+  if (!isPlaceholderSessionNote(session.notes)) return false;
+
+  await db.session.delete({ where: { id: sessionId } });
+  return true;
+}
+
+/** Bulk cleanup of placeholder/empty-note sessions with no photos (existing empty timeline cards). */
+export async function deleteAllOrphanPlaceholderSessions(db: SessionDayClient) {
+  const orphans = await db.session.findMany({
+    where: {
+      OR: [{ notes: PLACEHOLDER_SESSION_NOTE }, { notes: "" }],
+      photos: { none: {} },
+    },
+    select: {
+      id: true,
+      student: { select: { magicLinkToken: true } },
+    },
+  });
+
+  if (orphans.length === 0) {
+    return { deleted: 0, tokens: [] as string[] };
+  }
+
+  await db.session.deleteMany({
+    where: { id: { in: orphans.map((s) => s.id) } },
+  });
+
+  return {
+    deleted: orphans.length,
+    tokens: [...new Set(orphans.map((s) => s.student.magicLinkToken))],
+  };
 }

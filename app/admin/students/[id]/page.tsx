@@ -7,6 +7,7 @@ import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DashDivider } from "@/components/DashDivider";
 import { OpenProfileButton } from "@/components/OpenProfileButton";
 import { PortraitPhotoField } from "@/components/PortraitPhotoField";
+import { StudentSessionHistoryButton } from "@/components/StudentSessionHistoryButton";
 import { isTeacherAuthed } from "@/lib/auth";
 import { formatDisplayDate, toDateInputValue } from "@/lib/dates";
 import {
@@ -97,12 +98,19 @@ export default async function StudentDetailPage({
               : ""}
           </p>
         </div>
-        {!archived ? (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <OpenProfileButton url={url} />
-            <CopyLinkButton url={url} />
-          </div>
-        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <StudentSessionHistoryButton
+            studentId={student.id}
+            studentName={student.name}
+            sessionCount={student._count.sessions}
+          />
+          {!archived ? (
+            <>
+              <OpenProfileButton url={url} />
+              <CopyLinkButton url={url} />
+            </>
+          ) : null}
+        </div>
       </div>
 
       {archived ? (
@@ -116,7 +124,10 @@ export default async function StudentDetailPage({
       ) : null}
 
       <DashDivider className="!my-4" />
-      <AdminNav current="/admin/students" />
+      <AdminNav
+        current="/admin/students"
+        branch={[{ label: "Profile" }]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <form action={updateStudent} className="surface-card space-y-3 p-5">

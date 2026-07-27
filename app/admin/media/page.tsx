@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logoutTeacher } from "@/app/actions/auth";
 import { AdminNav } from "@/components/AdminNav";
@@ -6,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { MediaStudio } from "@/components/MediaStudio";
 import { isTeacherAuthed } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deleteAllOrphanPlaceholderSessions } from "@/lib/session-day";
 import { timed } from "@/lib/server-timing";
 import { activeStudentWhere } from "@/lib/students";
 
@@ -15,7 +17,25 @@ export default async function MediaPage() {
     redirect("/admin/login");
   }
 
-  const [students, unassigned, recentAssigned] = await timed(
+  // Clear leftover empty timeline cards (placeholder/empty note, no photos)
+  await timed("query:admin/media:orphan-cleanup", () =>
+    deleteAllOrphanPlaceholderSessions(prisma),
+  );
+
+  const taggedStudentsInclude = {
+    photos: {
+      select: {
+        id: true,
+        session: {
+          select: {
+            student: { select: { id: true, name: true } },
+          },
+        },
+      },
+    },
+  } as const;
+
+  const [students, unassigned, recentAssigned, activities] = await timed(
     "query:admin/media:bundle",
     () =>
       Promise.all([
@@ -27,35 +47,59 @@ export default async function MediaPage() {
         prisma.mediaAsset.findMany({
           where: { assignedAt: null },
           orderBy: { createdAt: "desc" },
+          include: taggedStudentsInclude,
         }),
         prisma.mediaAsset.findMany({
           where: { assignedAt: { not: null } },
           orderBy: { assignedAt: "desc" },
           take: 12,
+          include: taggedStudentsInclude,
+        }),
+        prisma.activity.findMany({
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
         }),
       ]),
   );
 
   const serialize = (items: typeof unassigned) =>
-    items.map((m) => ({
-      id: m.id,
-      url: m.url,
-      kind: m.kind,
-      originalName: m.originalName,
-      createdAt: m.createdAt.toISOString(),
-      assignedAt: m.assignedAt?.toISOString() ?? null,
-      isHighlight: m.isHighlight,
-    }));
+    items.map((m) => {
+      const seen = new Set<string>();
+      const taggedStudents: { id: string; name: string }[] = [];
+      for (const photo of m.photos) {
+        const student = photo.session.student;
+        if (seen.has(student.id)) continue;
+        seen.add(student.id);
+        taggedStudents.push({ id: student.id, name: student.name });
+      }
+      taggedStudents.sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        id: m.id,
+        url: m.url,
+        kind: m.kind,
+        originalName: m.originalName,
+        createdAt: m.createdAt.toISOString(),
+        assignedAt: m.assignedAt?.toISOString() ?? null,
+        isHighlight: m.isHighlight,
+        taggedStudents,
+      };
+    });
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold text-forest">
-            Photos & videos
+            Session builder
           </h1>
           <p className="mt-1 text-ink-soft">
-            Upload once, tag children, send to their timelines.
+            Build today’s class — photos, videos, and notes — then publish.
+            Edit past sessions from each child on{" "}
+            <Link href="/admin/students" className="font-bold underline">
+              Students
+            </Link>
+            .
           </p>
         </div>
         <form action={logoutTeacher}>
@@ -74,8 +118,8 @@ export default async function MediaPage() {
       {students.length === 0 ? (
         <EmptyState
           icon="📷"
-          title="Nowhere to send photos yet"
-          description="Add a student first — then you can upload moments and tag them onto each child’s timeline."
+          title="Nowhere to publish yet"
+          description="Add a student first — then you can build a session with notes and media for their timeline."
           actionHref="/admin/students/new"
           actionLabel="+ New student"
         />
@@ -84,6 +128,7 @@ export default async function MediaPage() {
           students={students}
           unassigned={serialize(unassigned)}
           recentAssigned={serialize(recentAssigned)}
+          initialActivities={activities}
         />
       )}
     </main>

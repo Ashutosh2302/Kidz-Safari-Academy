@@ -8,6 +8,7 @@ import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DashDivider } from "@/components/DashDivider";
 import { EmptyState } from "@/components/EmptyState";
 import { OpenProfileButton } from "@/components/OpenProfileButton";
+import { StudentSessionHistoryButton } from "@/components/StudentSessionHistoryButton";
 import { isTeacherAuthed } from "@/lib/auth";
 import { formatDisplayDate } from "@/lib/dates";
 import { parentPortalUrl } from "@/lib/magic-link";
@@ -239,7 +240,12 @@ function StudentCard({
         </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <StudentSessionHistoryButton
+          studentId={student.id}
+          studentName={student.name}
+          sessionCount={student._count.sessions}
+        />
         <Link
           href={`/admin/students/${student.id}`}
           className="text-sm font-bold text-forest-soft hover:text-forest"

@@ -5,7 +5,7 @@ import { PrismaClient } from "../generated/prisma/client";
  * Bump this after migrations that add models/fields so the Next.js
  * global Prisma singleton is discarded in development.
  */
-const PRISMA_SCHEMA_REV = 11;
+const PRISMA_SCHEMA_REV = 12;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -65,6 +65,12 @@ function isStaleClient(client: PrismaClient) {
   if (!runtimeHasField(client, "Attendance", "hoursAttended")) return true;
   if (!runtimeHasField(client, "Attendance", "isExtraClass")) return true;
   if (!runtimeHasField(client, "Session", "activityCategory")) return true;
+  if (
+    typeof (client as { activity?: { findMany?: unknown } }).activity
+      ?.findMany !== "function"
+  ) {
+    return true;
+  }
   if (!runtimeHasField(client, "Student", "photoUrl")) return true;
   if (!runtimeHasField(client, "SessionPhoto", "isHighlight")) return true;
   if (!runtimeHasField(client, "MediaAsset", "isHighlight")) return true;
