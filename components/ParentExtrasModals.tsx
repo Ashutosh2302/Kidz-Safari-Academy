@@ -198,7 +198,7 @@ export function ParentExtrasModals({
         type="button"
         onClick={() => scrollToId("this-week-screentime")}
         className={statPill}
-        title="Jump to this week’s screen-time"
+        title="Jump to lifetime screen-free hours"
       >
         Showing up{presentHours > 0 ? ` · ${presentHours}h` : ""}
       </button>

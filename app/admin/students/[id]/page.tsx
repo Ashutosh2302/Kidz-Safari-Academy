@@ -5,6 +5,7 @@ import { AdminNav } from "@/components/AdminNav";
 import { ArchiveStudentButton } from "@/components/ArchiveStudentButton";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DashDivider } from "@/components/DashDivider";
+import { OpenProfileButton } from "@/components/OpenProfileButton";
 import { PortraitPhotoField } from "@/components/PortraitPhotoField";
 import { isTeacherAuthed } from "@/lib/auth";
 import { formatDisplayDate, toDateInputValue } from "@/lib/dates";
@@ -96,7 +97,12 @@ export default async function StudentDetailPage({
               : ""}
           </p>
         </div>
-        {!archived ? <CopyLinkButton url={url} /> : null}
+        {!archived ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <OpenProfileButton url={url} />
+            <CopyLinkButton url={url} />
+          </div>
+        ) : null}
       </div>
 
       {archived ? (

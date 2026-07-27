@@ -7,6 +7,7 @@ import { ChildAvatar } from "@/components/ChildAvatar";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DashDivider } from "@/components/DashDivider";
 import { EmptyState } from "@/components/EmptyState";
+import { OpenProfileButton } from "@/components/OpenProfileButton";
 import { isTeacherAuthed } from "@/lib/auth";
 import { formatDisplayDate } from "@/lib/dates";
 import { parentPortalUrl } from "@/lib/magic-link";
@@ -213,7 +214,12 @@ function StudentCard({
             </p>
           </div>
         </div>
-        {!archived ? <CopyLinkButton url={url} /> : null}
+        {!archived ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <OpenProfileButton url={url} />
+            <CopyLinkButton url={url} />
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">

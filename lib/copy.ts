@@ -12,12 +12,12 @@ export function hoursOfScreenFreePlayLabel(
   suffix = "since joining",
 ) {
   const unit = hours === 1 ? "hour" : "hours";
-  return `${hours} ${unit} of screen-free play ${suffix}`;
+  return `${hours} screen-free ${unit} ${suffix}`;
 }
 
 export function hoursOfPlayLabel(hours: number) {
   const unit = hours === 1 ? "hour" : "hours";
-  return `${hours} ${unit} of real-world play`;
+  return `${hours} screen-free ${unit}`;
 }
 
 /** e.g. 1st, 2nd, 3rd, 4th */

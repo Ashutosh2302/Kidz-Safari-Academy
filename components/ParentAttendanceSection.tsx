@@ -83,8 +83,8 @@ export function ParentAttendanceSection({
           />
         </div>
         <p className="mt-2 text-xs text-ink-soft">
-          Classes are Mon–Fri. A full day is +{DEFAULT_CLASS_HOURS} hours of
-          real-world play for {name}.
+          Classes are Mon–Fri. A full day is +{DEFAULT_CLASS_HOURS} screen-free
+          hours for {name}.
         </p>
       </div>
 

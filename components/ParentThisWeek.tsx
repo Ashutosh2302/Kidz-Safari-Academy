@@ -19,8 +19,6 @@ export type LeapHighlight = {
 
 export function ParentThisWeek({
   name,
-  weekHours,
-  weekTarget,
   hoursSinceJoining,
   milestones,
   totalLeapCount,
@@ -28,8 +26,6 @@ export function ParentThisWeek({
   memoryPhotos,
 }: {
   name: string;
-  weekHours: number;
-  weekTarget: number;
   hoursSinceJoining: number;
   /** Up to 3 recent leaps for the compact preview row. */
   milestones: LeapHighlight[];
@@ -37,7 +33,8 @@ export function ParentThisWeek({
   joinedOn: string;
   memoryPhotos: MemoryLaneMedia[];
 }) {
-  const fill = Math.min(100, (weekHours / Math.max(weekTarget, 1)) * 100);
+  // Soft visual fill for the jar — full once they reach 6 lifetime hours
+  const fill = Math.min(100, (hoursSinceJoining / 6) * 100);
   const plantHeight = fill;
   const shareMilestone = milestones[0] ?? null;
   const remainingCount = Math.max(0, totalLeapCount - milestones.length);
@@ -51,7 +48,7 @@ export function ParentThisWeek({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-forest-soft">
-            This week
+            Lifetime
           </p>
           <h2 className="font-display text-2xl font-bold text-forest">
             Screen-free hours
@@ -115,7 +112,7 @@ export function ParentThisWeek({
               }}
             >
               <span className="text-lg leading-none drop-shadow-sm">🌿</span>
-              {weekHours >= 3 && (
+              {hoursSinceJoining >= 3 && (
                 <span className="mt-0.5 text-sm leading-none">🌻</span>
               )}
             </div>
@@ -123,7 +120,7 @@ export function ParentThisWeek({
           </div>
           <div className="min-w-0">
             <p className="font-display text-lg font-bold text-forest">
-              {hoursOfPlayLabel(weekHours)}
+              {hoursOfPlayLabel(hoursSinceJoining)}
             </p>
             <p className="mt-1 text-sm leading-snug text-ink-soft">
               Instead of screens, {name} spent this time playing, building, and
@@ -143,7 +140,7 @@ export function ParentThisWeek({
               />
             </div>
             <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-forest-soft">
-              {weekHours}/{weekTarget} in the last 7 days
+              {hoursSinceJoining} hours since joining
             </p>
           </div>
         </div>

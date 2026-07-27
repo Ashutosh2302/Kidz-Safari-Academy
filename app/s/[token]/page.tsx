@@ -25,7 +25,6 @@ import {
   distinctSessionDayCount,
 } from "@/lib/session-day";
 import { teacherAttribution } from "@/lib/teacher";
-import { isInCurrentWeek, weekHoursTarget } from "@/lib/week";
 
 function formatSessionDate(date: Date) {
   return new Intl.DateTimeFormat("en-IN", {
@@ -90,9 +89,6 @@ export default async function ParentPortalPage({
     0,
   );
   const hoursSinceJoining = presentHours(student.attendance);
-  const weekHours = presentHours(
-    student.attendance.filter((a) => isInCurrentWeek(a.date)),
-  );
   const classStreak = consecutiveClassStreak(student.attendance);
   const isNewJourney = sessionCount === 0;
 
@@ -180,8 +176,6 @@ export default async function ParentPortalPage({
         <div className="relative mx-auto max-w-6xl space-y-5">
           <ParentThisWeek
             name={name}
-            weekHours={weekHours}
-            weekTarget={weekHoursTarget()}
             hoursSinceJoining={hoursSinceJoining}
             milestones={recentMilestones}
             totalLeapCount={student.milestones.length}
