@@ -32,12 +32,73 @@ async function readJsonSafe(res: Response): Promise<{
     if (res.status === 413) {
       return {
         error:
-          "That file is too large to upload through the server. Try a smaller photo, or ask to enable direct S3 uploads.",
+          "That file is too large for this connection. Try a smaller photo or a short clip.",
       };
     }
     return {
       error: `Upload failed (${res.status}). Please try again with a smaller file.`,
     };
+  }
+}
+
+function isLikelyCorsFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("Load failed") ||
+    message.includes("CORS")
+  );
+}
+
+/**
+ * Shrink phone photos so they fit under Vercel’s proxy limit when direct S3
+ * isn’t available (CORS not ready, etc.). Videos are left unchanged.
+ */
+async function compressImageForProxy(file: File): Promise<File | null> {
+  if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+    return null;
+  }
+  // HEIC often can’t be decoded in-browser — skip and let caller handle
+  if (
+    file.type.includes("heic") ||
+    file.type.includes("heif") ||
+    /\.heic$/i.test(file.name) ||
+    /\.heif$/i.test(file.name)
+  ) {
+    return null;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxEdge = 1920;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return null;
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    for (const quality of [0.82, 0.7, 0.55]) {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", quality),
+      );
+      if (!blob) continue;
+      if (blob.size <= PROXY_UPLOAD_BYTES) {
+        const base = (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
+        return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+      }
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -47,7 +108,6 @@ async function uploadViaProxy(
   contentType: string,
 ): Promise<UploadResult> {
   const body = new FormData();
-  // Ensure MIME is set — some phones send empty type
   const named = new File([file], file.name || "upload.jpg", {
     type: contentType,
   });
@@ -101,7 +161,7 @@ async function uploadViaPresign(
   if (!putRes.ok) {
     throw new Error(
       putRes.status === 403
-        ? "Upload blocked by storage permissions. Check S3/R2 CORS allows PUT from this site."
+        ? "Upload blocked by storage permissions (HTTP 403)."
         : `Storage upload failed (${putRes.status}).`,
     );
   }
@@ -134,7 +194,7 @@ async function uploadViaPresign(
 
 /**
  * Upload a photo/video from the teacher phone/browser.
- * Uses direct-to-S3 when possible so large phone files bypass Vercel’s 4.5MB limit.
+ * Prefers direct-to-S3; falls back to compressed proxy upload for photos.
  */
 export async function uploadMediaFile(
   file: File,
@@ -144,7 +204,8 @@ export async function uploadMediaFile(
     throw new Error("That file is a bit large — keep it under 25MB.");
   }
 
-  const contentType = resolveUploadContentType(file.name, file.type);
+  let working = file;
+  let contentType = resolveUploadContentType(working.name, working.type);
   if (!contentType) {
     throw new Error(
       "Please upload a photo or short video (jpg, png, webp, heic, mp4, mov).",
@@ -155,31 +216,45 @@ export async function uploadMediaFile(
     throw new Error("Portrait must be a photo (jpg, png, webp, or heic).");
   }
 
-  // Prefer direct S3 for anything that might hit the serverless body limit
-  if (file.size > PROXY_UPLOAD_BYTES) {
-    try {
-      return await uploadViaPresign(file, purpose, contentType);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Upload failed";
-      // CORS misconfig is the usual failure mode — make it actionable
-      if (
-        message.includes("Failed to fetch") ||
-        message.includes("NetworkError") ||
-        message.includes("Load failed")
-      ) {
+  const tryProxy = async () => {
+    if (working.size > PROXY_UPLOAD_BYTES) {
+      const compressed = await compressImageForProxy(working);
+      if (!compressed) {
         throw new Error(
-          "Could not reach storage from this phone. Ask to enable S3/R2 CORS for this site (PUT), then try again.",
+          "That photo is too large to upload right now. Try a smaller photo, or wait a minute and retry.",
         );
       }
-      throw error instanceof Error ? error : new Error(message);
+      working = compressed;
+      contentType = "image/jpeg";
+    }
+    return uploadViaProxy(working, purpose, contentType!);
+  };
+
+  // Small files: proxy first (no CORS needed)
+  if (working.size <= PROXY_UPLOAD_BYTES) {
+    try {
+      return await uploadViaProxy(working, purpose, contentType);
+    } catch {
+      return await uploadViaPresign(working, purpose, contentType);
     }
   }
 
-  // Small files: try proxy first (works without CORS), then presign
+  // Large files: direct S3, then compress+proxy for photos
   try {
-    return await uploadViaProxy(file, purpose, contentType);
-  } catch {
-    return await uploadViaPresign(file, purpose, contentType);
+    return await uploadViaPresign(working, purpose, contentType);
+  } catch (error) {
+    if (contentType.startsWith("image/") || isLikelyCorsFailure(error)) {
+      try {
+        return await tryProxy();
+      } catch {
+        /* fall through */
+      }
+    }
+    if (isLikelyCorsFailure(error)) {
+      throw new Error(
+        "Could not upload from this phone. Try again in a moment, or use a smaller photo.",
+      );
+    }
+    throw error instanceof Error ? error : new Error("Upload failed");
   }
 }
