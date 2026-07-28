@@ -131,7 +131,7 @@ export function ParentExtrasProvider({
                 Close
               </button>
             </div>
-            <div className="p-3 sm:p-4">
+            <div className="px-4 py-4 sm:px-5 sm:py-5">
               {open === "attendance" ? (
                 <ParentAttendanceSection
                   name={name}

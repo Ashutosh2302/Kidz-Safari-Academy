@@ -9,6 +9,7 @@ import {
   portraitSourceRect,
   type PortraitCrop,
 } from "@/lib/portrait-crop";
+import { uploadMediaFile } from "@/lib/upload-client";
 
 type Props = {
   name?: string;
@@ -74,17 +75,8 @@ export function PortraitPhotoField({
 
     try {
       const blob = await exportPortraitBlob(draftImg, crop);
-      const body = new FormData();
-      body.append(
-        "file",
-        new File([blob], "portrait.jpg", { type: "image/jpeg" }),
-      );
-      body.append("purpose", "portrait");
-      const res = await fetch("/api/upload", { method: "POST", body });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        throw new Error(data.error ?? "Upload failed");
-      }
+      const file = new File([blob], "portrait.jpg", { type: "image/jpeg" });
+      const data = await uploadMediaFile(file, "portrait");
       setUrl(data.url);
       cancelCrop();
     } catch (e) {

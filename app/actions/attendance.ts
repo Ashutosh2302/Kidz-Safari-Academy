@@ -8,8 +8,64 @@ import { parseDateOnly } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 import { revalidateParentPortal } from "@/lib/revalidate-parent";
 import { isWeekendDate } from "@/lib/schedule";
+import { activeStudentWhere } from "@/lib/students";
 
 const DEFAULT_EXTRA_NOTE = "Extra class — teachers went the extra mile.";
+
+/** Active roster with attendance marks for a single YYYY-MM-DD date. */
+export async function getAttendanceBoardForDate(dateStr: string) {
+  if (!(await isTeacherAuthed())) {
+    return { error: "Please sign in first." };
+  }
+
+  const date = parseDateOnly(dateStr);
+  if (Number.isNaN(date.getTime())) {
+    return { error: "That date doesn’t look right." };
+  }
+
+  const students = await prisma.student.findMany({
+    where: activeStudentWhere,
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      attendance: {
+        where: { date },
+        take: 1,
+        select: {
+          status: true,
+          note: true,
+          hoursAttended: true,
+        },
+      },
+    },
+  });
+
+  const board = students.map((s) => {
+    const mark = s.attendance[0];
+    return {
+      id: s.id,
+      name: s.name,
+      status: (mark?.status ?? null) as AttendanceStatus | null,
+      note: mark?.note ?? null,
+      hoursAttended: mark?.hoursAttended ?? null,
+    };
+  });
+
+  const present = board
+    .filter((s) => s.status === "PRESENT")
+    .map((s) => ({ id: s.id, name: s.name }));
+
+  const markedCount = board.filter((s) => s.status != null).length;
+
+  return {
+    success: true as const,
+    date: dateStr,
+    students: board,
+    present,
+    markedCount,
+  };
+}
 
 export async function saveAttendanceForDate(input: {
   date: string;
@@ -66,6 +122,7 @@ export async function saveAttendanceForDate(input: {
 
   revalidatePath("/admin/attendance");
   revalidatePath("/admin/students");
+  revalidatePath("/admin/media");
   for (const mark of input.marks) {
     const student = await prisma.student.findUnique({
       where: { id: mark.studentId },

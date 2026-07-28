@@ -10,9 +10,14 @@ type Slide = {
 };
 
 const mediaFrame =
-  "flex aspect-[16/10] max-h-[420px] w-full items-center justify-center overflow-hidden rounded-xl bg-cream";
-const mediaContain =
-  "max-h-full max-w-full object-contain";
+  "relative aspect-[4/3] max-h-[min(52vh,420px)] w-full overflow-hidden rounded-xl bg-forest/10 sm:aspect-[16/10]";
+const mediaFill = "absolute inset-0 h-full w-full object-cover";
+
+/** iOS Safari often shows a blank frame until play — #t=0.001 forces the first frame. */
+function videoSrc(url: string) {
+  if (url.includes("#")) return url;
+  return `${url}#t=0.001`;
+}
 
 export function MediaCarousel({
   slides,
@@ -47,10 +52,11 @@ export function MediaCarousel({
   const media = current.isVideo ? (
     <video
       key={current.id}
-      src={current.url}
+      src={videoSrc(current.url)}
       controls
       playsInline
-      className={mediaContain}
+      preload="metadata"
+      className={mediaFill}
     />
   ) : (
     // eslint-disable-next-line @next/next/no-img-element
@@ -58,7 +64,7 @@ export function MediaCarousel({
       key={current.id}
       src={current.url}
       alt={current.caption ?? altFallback}
-      className={`${mediaContain} transition duration-300`}
+      className={`${mediaFill} transition duration-300`}
       loading="lazy"
     />
   );

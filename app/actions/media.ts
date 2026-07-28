@@ -73,6 +73,24 @@ export async function publishSessionDay(input: {
     return { error: "Those children weren’t found." };
   }
 
+  // Only children marked PRESENT for this day can receive a session
+  const presentMarks = await prisma.attendance.findMany({
+    where: {
+      date: sessionDate,
+      status: "PRESENT",
+      studentId: { in: students.map((s) => s.id) },
+    },
+    select: { studentId: true },
+  });
+  const presentIds = new Set(presentMarks.map((m) => m.studentId));
+  const notPresent = students.filter((s) => !presentIds.has(s.id));
+  if (notPresent.length > 0) {
+    const names = notPresent.map((s) => s.name.split(/\s+/)[0]).join(", ");
+    return {
+      error: `Mark attendance first. Not present for this day: ${names}.`,
+    };
+  }
+
   const { dayStart, dayEnd } = utcDayRange(sessionDate);
   const existingForDay = await prisma.session.findMany({
     where: {

@@ -2,30 +2,36 @@ import { NextResponse } from "next/server";
 import { isTeacherAuthed } from "@/lib/auth";
 import {
   ALLOWED_UPLOAD_TYPES,
-  MAX_UPLOAD_BYTES,
   mediaKindFromContentType,
   resolveUploadContentType,
 } from "@/lib/media-types";
+import { getPublicUrl, isManagedUploadKey } from "@/lib/s3";
 import { prisma } from "@/lib/prisma";
-import { uploadToS3 } from "@/lib/s3";
 
-/** Proxy upload for small files / local fallback. Prefer /api/upload/presign. */
 export async function POST(request: Request) {
   if (!(await isTeacherAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const formData = await request.formData();
-    const file = formData.get("file");
-    const purpose = String(formData.get("purpose") ?? "session");
-    const isPortrait = purpose === "portrait";
+    const body = (await request.json()) as {
+      key?: string;
+      contentType?: string;
+      filename?: string;
+      purpose?: string;
+    };
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    const key = String(body.key ?? "");
+    const purpose = String(body.purpose ?? "session");
+    const isPortrait = purpose === "portrait";
+    const folder = isPortrait ? "portraits" : "sessions";
+
+    if (!isManagedUploadKey(key, folder)) {
+      return NextResponse.json({ error: "Invalid upload key." }, { status: 400 });
     }
 
-    const contentType = resolveUploadContentType(file.name, file.type);
+    const filename = String(body.filename ?? "upload.jpg");
+    const contentType = resolveUploadContentType(filename, body.contentType);
     if (!contentType || !ALLOWED_UPLOAD_TYPES.has(contentType)) {
       return NextResponse.json(
         {
@@ -43,23 +49,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json(
-        { error: "That file is a bit large — keep it under 25MB." },
-        { status: 400 },
-      );
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const { url } = await uploadToS3({
-      file: buffer,
-      contentType,
-      filename: file.name || "upload.jpg",
-      folder: isPortrait ? "portraits" : "sessions",
-    });
+    const url = getPublicUrl(key);
 
     if (isPortrait) {
-      return NextResponse.json({ url, kind: "image" });
+      return NextResponse.json({ url, kind: "image" as const });
     }
 
     const asset = await prisma.mediaAsset.create({
@@ -67,7 +60,7 @@ export async function POST(request: Request) {
         url,
         contentType,
         kind: mediaKindFromContentType(contentType),
-        originalName: file.name || null,
+        originalName: filename || null,
       },
     });
 
@@ -78,8 +71,8 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Upload failed unexpectedly.";
-    console.error("Upload error:", error);
+      error instanceof Error ? error.message : "Could not finish upload.";
+    console.error("Upload complete error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

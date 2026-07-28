@@ -1,5 +1,7 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { nanoid } from "nanoid";
+import { extensionFromFilename } from "@/lib/media-types";
 
 function getS3Client() {
   const region = process.env.S3_REGION ?? process.env.AWS_REGION;
@@ -23,12 +25,29 @@ function getS3Client() {
   });
 }
 
-function getPublicUrl(key: string) {
+function getBucket() {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) {
+    throw new Error("S3_BUCKET is not set");
+  }
+  return bucket;
+}
+
+export function getPublicUrl(key: string) {
   const base = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, "");
   if (!base) {
     throw new Error("S3_PUBLIC_BASE_URL is not set");
   }
   return `${base}/${key}`;
+}
+
+export function buildObjectKey(params: {
+  filename: string;
+  folder?: string;
+}) {
+  const ext = extensionFromFilename(params.filename);
+  const folder = params.folder ?? "sessions";
+  return `${folder}/${nanoid()}.${ext}`;
 }
 
 export async function uploadToS3(params: {
@@ -37,16 +56,11 @@ export async function uploadToS3(params: {
   filename: string;
   folder?: string;
 }) {
-  const bucket = process.env.S3_BUCKET;
-  if (!bucket) {
-    throw new Error("S3_BUCKET is not set");
-  }
-
-  const ext = params.filename.includes(".")
-    ? params.filename.split(".").pop()
-    : "bin";
-  const folder = params.folder ?? "sessions";
-  const key = `${folder}/${nanoid()}.${ext}`;
+  const bucket = getBucket();
+  const key = buildObjectKey({
+    filename: params.filename,
+    folder: params.folder,
+  });
 
   const client = getS3Client();
   await client.send(
@@ -59,4 +73,35 @@ export async function uploadToS3(params: {
   );
 
   return { key, url: getPublicUrl(key) };
+}
+
+/** Browser uploads directly to S3 — avoids Vercel’s 4.5MB body limit. */
+export async function createPresignedPutUrl(params: {
+  contentType: string;
+  filename: string;
+  folder?: string;
+  expiresInSeconds?: number;
+}) {
+  const bucket = getBucket();
+  const key = buildObjectKey({
+    filename: params.filename,
+    folder: params.folder,
+  });
+
+  const client = getS3Client();
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: params.contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(client, command, {
+    expiresIn: params.expiresInSeconds ?? 60 * 10,
+  });
+
+  return { key, uploadUrl, publicUrl: getPublicUrl(key) };
+}
+
+export function isManagedUploadKey(key: string, folder: "sessions" | "portraits") {
+  return new RegExp(`^${folder}\\/[A-Za-z0-9_-]+\\.[a-z0-9]+$`).test(key);
 }

@@ -1,3 +1,9 @@
+import {
+  LeapUnlockCard,
+  LeapUnlockCardList,
+} from "@/components/LeapUnlockCard";
+import { formatDisplayDate } from "@/lib/dates";
+
 type Item = {
   id: string;
   achievedDate: Date;
@@ -9,7 +15,7 @@ type Item = {
   };
 };
 
-/** All leaps modal body — previous surface-card + compact 3-up grid. */
+/** All leaps modal body — clean, parent-facing list. */
 export function ParentMilestonesSection({
   name,
   items,
@@ -19,55 +25,44 @@ export function ParentMilestonesSection({
 }) {
   if (items.length === 0) {
     return (
-      <section className="surface-card p-5 sm:p-6">
-        <h2 className="font-display text-2xl font-bold text-forest">
-          Tiny leaps
-        </h2>
-        <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-forest-soft">
+      <div className="px-1 py-2">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-forest-soft">
           0 leaps yet
         </p>
-        <p className="mt-2 text-sm text-ink-soft">
+        <p className="mt-2 text-sm leading-relaxed text-ink-soft">
           No leaps unlocked yet — every journey starts with tiny steps 🐾
         </p>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="mt-1 text-sm leading-relaxed text-ink-soft">
           As {name} grows, specific moments will light up here.
         </p>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section className="surface-card p-5 sm:p-6">
-      <h2 className="font-display text-2xl font-bold text-forest">Tiny leaps</h2>
-      <p className="mt-1 text-sm text-ink-soft">
-        Skills {name} has unlocked since joining
+    <div>
+      <p className="text-sm leading-relaxed text-ink-soft">
+        Skills {name} has unlocked since joining · {items.length}{" "}
+        {items.length === 1 ? "leap" : "leaps"}
       </p>
-      <ul className="mt-4 grid grid-cols-3 gap-3">
-        {items.map((item, index) => (
-          <li
-            key={item.id}
-            className="animate-soft-pop flex min-w-0 items-start gap-3 rounded-2xl border-2 border-forest bg-pastel-yellow p-3"
-            style={{ animationDelay: `${index * 60}ms` }}
-          >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-forest bg-card text-2xl">
-              {item.milestone.icon}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-display font-bold text-forest">
-                {item.milestone.name}
-              </span>
-              <span className="block truncate text-xs font-semibold text-forest-soft">
-                {item.milestone.category}
-              </span>
-              {item.note?.trim() ? (
-                <span className="mt-1 line-clamp-2 block text-sm leading-snug text-ink-soft">
-                  {item.note.trim()}
-                </span>
-              ) : null}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
+      <LeapUnlockCardList className="mt-4" columns={2}>
+        {items.map((item, index) => {
+          const dateLabel = formatDisplayDate(item.achievedDate);
+          const description = [dateLabel, item.note?.trim()]
+            .filter(Boolean)
+            .join(" · ");
+          return (
+            <LeapUnlockCard
+              key={item.id}
+              index={index}
+              icon={item.milestone.icon}
+              name={item.milestone.name}
+              category={item.milestone.category}
+              description={description}
+            />
+          );
+        })}
+      </LeapUnlockCardList>
+    </div>
   );
 }

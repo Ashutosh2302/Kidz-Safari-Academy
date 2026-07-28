@@ -25,7 +25,7 @@ export default function HomePage() {
       <DashDivider />
 
       <section className="animate-fade-up mt-4">
-        <span className="pill-green">Ages 2 to 6</span>
+        <span className="pill-green">Ages 3 to 10</span>
 
         <h1 className="mt-5 font-display text-4xl font-bold leading-[1.15] text-forest sm:text-5xl">
           Where little explorers take their{" "}

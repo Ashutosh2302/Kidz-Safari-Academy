@@ -16,21 +16,24 @@ export function LeapUnlockCard({
 }) {
   return (
     <li
-      className="animate-soft-pop flex min-w-0 items-start gap-2 rounded-2xl border-2 border-forest bg-pastel-yellow p-2 sm:gap-2.5 sm:p-2.5"
+      className="animate-soft-pop flex min-w-0 items-start gap-3 rounded-2xl border-2 border-forest bg-pastel-yellow p-3"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-forest bg-card text-lg sm:h-10 sm:w-10 sm:text-xl">
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-forest bg-card text-xl"
+        aria-hidden
+      >
         {icon}
       </span>
-      <span className="min-w-0">
-        <span className="block truncate font-display text-sm font-bold leading-tight text-forest">
+      <span className="min-w-0 flex-1 overflow-hidden">
+        <span className="block font-display text-base font-bold leading-snug text-forest">
           {name}
         </span>
-        <span className="block truncate text-[10px] font-semibold text-forest-soft">
+        <span className="mt-0.5 block text-xs font-semibold text-forest-soft">
           {category}
         </span>
         {description?.trim() ? (
-          <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-ink-soft">
+          <span className="mt-1 block text-sm leading-snug text-ink-soft">
             {description.trim()}
           </span>
         ) : null}
@@ -39,16 +42,25 @@ export function LeapUnlockCard({
   );
 }
 
-/** Up to 3 compact cards per row. */
+/** Stacked list — readable on phones; optional second column on wider screens. */
 export function LeapUnlockCardList({
   children,
   className = "",
+  columns = 1,
 }: {
   children: ReactNode;
   className?: string;
+  /** Use 2 on wide modals; keep 1 in narrow page columns. */
+  columns?: 1 | 2;
 }) {
   return (
-    <ul className={`grid grid-cols-3 gap-2 ${className}`.trim()}>{children}</ul>
+    <ul
+      className={`grid grid-cols-1 gap-2 ${
+        columns === 2 ? "sm:grid-cols-2" : ""
+      } ${className}`.trim()}
+    >
+      {children}
+    </ul>
   );
 }
 

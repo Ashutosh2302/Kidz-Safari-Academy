@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import {
   deleteMediaAsset,
@@ -9,12 +15,15 @@ import {
   toggleMediaHighlight,
   untagMediaFromStudents,
 } from "@/app/actions/media";
+import { getAttendanceBoardForDate } from "@/app/actions/attendance";
 import {
   ActivityPicker,
   type ActivityOption,
 } from "@/components/ActivityPicker";
+import { QuickAttendanceModal } from "@/components/QuickAttendanceModal";
 import { StudentMultiSelect } from "@/components/StudentMultiSelect";
 import { toDateInputValue } from "@/lib/dates";
+import { uploadMediaFile } from "@/lib/upload-client";
 
 type TaggedStudent = { id: string; name: string };
 
@@ -45,9 +54,7 @@ export function MediaStudio({
   const router = useRouter();
   // Default: all children selected — easiest after-class flow
   const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
-  const [selectedStudents, setSelectedStudents] = useState<string[]>(() =>
-    students.map((s) => s.id),
-  );
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [sessionDate, setSessionDate] = useState(toDateInputValue);
   const [captionTemplate, setCaptionTemplate] = useState(
     "{name} had a lovely moment in class today",
@@ -61,6 +68,36 @@ export function MediaStudio({
   useEffect(() => {
     setActivities(initialActivities);
   }, [initialActivities]);
+
+  const [presentStudents, setPresentStudents] = useState<Student[]>([]);
+  const [attendanceMarkedCount, setAttendanceMarkedCount] = useState(0);
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+
+  const refreshPresentForDate = useCallback(async (date: string) => {
+    setAttendanceLoading(true);
+    setAttendanceError(null);
+    const result = await getAttendanceBoardForDate(date);
+    if ("error" in result && result.error) {
+      setAttendanceError(result.error);
+      setPresentStudents([]);
+      setAttendanceMarkedCount(0);
+      setSelectedStudents([]);
+      setAttendanceLoading(false);
+      return;
+    }
+    if (!("success" in result) || !result.success) return;
+    setPresentStudents(result.present);
+    setAttendanceMarkedCount(result.markedCount);
+    setSelectedStudents(result.present.map((s) => s.id));
+    setAttendanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void refreshPresentForDate(sessionDate);
+  }, [sessionDate, refreshPresentForDate]);
+
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -98,9 +135,11 @@ export function MediaStudio({
   }, [managingItem]);
 
   const previewName = useMemo(() => {
-    const s = students.find((x) => selectedStudents.includes(x.id));
-    return s?.name ?? students[0]?.name ?? "Aarav";
-  }, [students, selectedStudents]);
+    const s =
+      presentStudents.find((x) => selectedStudents.includes(x.id)) ??
+      students.find((x) => selectedStudents.includes(x.id));
+    return s?.name ?? presentStudents[0]?.name ?? students[0]?.name ?? "Aarav";
+  }, [students, presentStudents, selectedStudents]);
 
   const previewFirst = previewName.split(/\s+/)[0] ?? previewName;
 
@@ -131,11 +170,7 @@ export function MediaStudio({
 
     try {
       for (const file of Array.from(files)) {
-        const body = new FormData();
-        body.append("file", file);
-        const res = await fetch("/api/upload", { method: "POST", body });
-        const data = (await res.json()) as { error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Upload failed");
+        await uploadMediaFile(file, "session");
       }
       setMessage(`Uploaded ${files.length} file${files.length === 1 ? "" : "s"}.`);
       router.refresh();
@@ -148,6 +183,7 @@ export function MediaStudio({
 
   const canPublish =
     selectedStudents.length > 0 &&
+    presentStudents.length > 0 &&
     (selectedMedia.length > 0 || sessionNote.trim().length > 0);
 
   function onPublish() {
@@ -268,16 +304,19 @@ export function MediaStudio({
             {uploading ? "Uploading…" : "Drop photos & videos here"}
           </span>
           <span className="text-sm text-ink-soft">
-            Upload to the library, then include them in today’s session. jpg,
-            png, webp, mp4 (up to 25MB)
+            Upload to the library, then include them in today’s session. Photos
+            &amp; short videos from your phone (up to 25MB)
           </span>
           <input
             type="file"
-            accept="image/*,video/mp4,video/quicktime"
+            accept="image/*,image/heic,image/heif,video/*,video/mp4,video/quicktime,.heic,.heif,.mov,.mp4"
             multiple
             className="hidden"
             disabled={uploading}
-            onChange={(e) => onUpload(e.target.files)}
+            onChange={(e) => {
+              void onUpload(e.target.files);
+              e.target.value = "";
+            }}
           />
         </label>
 
@@ -537,13 +576,35 @@ export function MediaStudio({
         </div>
       ) : null}
 
+      {showAttendanceModal ? (
+        <QuickAttendanceModal
+          date={sessionDate}
+          onClose={() => setShowAttendanceModal(false)}
+          onSaved={(present) => {
+            setPresentStudents(present);
+            setAttendanceMarkedCount(
+              present.length > 0 ? Math.max(present.length, 1) : 0,
+            );
+            // Re-fetch full marked count for empty-present messaging
+            void refreshPresentForDate(sessionDate).then(() => {
+              setShowAttendanceModal(false);
+            });
+            setMessage(
+              present.length > 0
+                ? `${present.length} present — ready to build the session.`
+                : "Attendance saved. Mark someone present to continue.",
+            );
+          }}
+        />
+      ) : null}
+
       <aside className="surface-card h-fit space-y-4 p-5 lg:sticky lg:top-4">
         <h2 className="font-display text-xl font-bold text-forest">
           Build today’s session
         </h2>
         <p className="text-sm text-ink-soft">
-          Pick children, add a note and/or photos from the library, then
-          publish to timelines.
+          Mark who’s present for the day, then add a note and/or photos and
+          publish.
         </p>
 
         <label className="block">
@@ -556,11 +617,62 @@ export function MediaStudio({
           />
         </label>
 
-        <StudentMultiSelect
-          students={students}
-          selectedIds={selectedStudents}
-          onChange={setSelectedStudents}
-        />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-forest">
+              Children present
+              {!attendanceLoading ? (
+                <span className="font-semibold text-forest-soft">
+                  {" "}
+                  · {presentStudents.length}
+                </span>
+              ) : null}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowAttendanceModal(true)}
+              className="text-xs font-bold text-forest-soft underline"
+            >
+              {presentStudents.length === 0
+                ? "Mark attendance"
+                : "Edit attendance"}
+            </button>
+          </div>
+
+          {attendanceLoading ? (
+            <p className="rounded-2xl border-2 border-dashed border-forest/25 bg-mint/30 px-3 py-4 text-center text-sm text-ink-soft">
+              Checking who’s present…
+            </p>
+          ) : attendanceError ? (
+            <p className="rounded-2xl border-2 border-red bg-pastel-pink px-3 py-3 text-sm font-semibold text-red-deep">
+              {attendanceError}
+            </p>
+          ) : presentStudents.length === 0 ? (
+            <div className="rounded-2xl border-2 border-forest bg-pastel-yellow/60 px-3 py-4 text-center">
+              <p className="text-sm font-bold text-forest">
+                {attendanceMarkedCount === 0
+                  ? "Mark attendance for this day first"
+                  : "No one is marked present for this day"}
+              </p>
+              <p className="mt-1 text-xs text-ink-soft">
+                Only children marked present can be added to a session.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowAttendanceModal(true)}
+                className="btn-secondary mt-3 !px-4 !py-2 text-sm"
+              >
+                Mark attendance
+              </button>
+            </div>
+          ) : (
+            <StudentMultiSelect
+              students={presentStudents}
+              selectedIds={selectedStudents}
+              onChange={setSelectedStudents}
+            />
+          )}
+        </div>
 
         <label className="block">
           <span className="mb-1 block text-sm font-bold text-forest">
