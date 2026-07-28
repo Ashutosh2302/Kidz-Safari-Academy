@@ -24,6 +24,7 @@ import { QuickAttendanceModal } from "@/components/QuickAttendanceModal";
 import { StudentMultiSelect } from "@/components/StudentMultiSelect";
 import { toDateInputValue } from "@/lib/dates";
 import { uploadMediaFile } from "@/lib/upload-client";
+import { VideoThumb } from "@/components/VideoThumb";
 
 type TaggedStudent = { id: string; name: string };
 
@@ -360,11 +361,7 @@ export function MediaStudio({
                       }`}
                     >
                       {item.kind === "video" ? (
-                        <video
-                          src={item.url}
-                          className="aspect-square w-full object-cover"
-                          muted
-                        />
+                        <VideoThumb src={item.url} />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -460,11 +457,7 @@ export function MediaStudio({
             <div className="space-y-4 p-4">
               <div className="photo-frame mx-auto w-28 overflow-hidden p-1">
                 {managingItem.kind === "video" ? (
-                  <video
-                    src={managingItem.url}
-                    className="aspect-square w-full object-cover"
-                    muted
-                  />
+                  <VideoThumb src={managingItem.url} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img

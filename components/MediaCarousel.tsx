@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { videoPosterSrc } from "@/components/VideoThumb";
 
 type Slide = {
   id: string;
@@ -12,12 +13,6 @@ type Slide = {
 const mediaFrame =
   "relative aspect-[4/3] max-h-[min(52vh,420px)] w-full overflow-hidden rounded-xl bg-forest/10 sm:aspect-[16/10]";
 const mediaFill = "absolute inset-0 h-full w-full object-cover";
-
-/** iOS Safari often shows a blank frame until play — #t=0.001 forces the first frame. */
-function videoSrc(url: string) {
-  if (url.includes("#")) return url;
-  return `${url}#t=0.001`;
-}
 
 export function MediaCarousel({
   slides,
@@ -52,7 +47,7 @@ export function MediaCarousel({
   const media = current.isVideo ? (
     <video
       key={current.id}
-      src={videoSrc(current.url)}
+      src={videoPosterSrc(current.url)}
       controls
       playsInline
       preload="metadata"

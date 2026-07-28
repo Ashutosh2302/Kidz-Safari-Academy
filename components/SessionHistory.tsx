@@ -12,6 +12,7 @@ import {
   ActivityPicker,
   type ActivityOption,
 } from "@/components/ActivityPicker";
+import { VideoThumb } from "@/components/VideoThumb";
 import { formatDisplayDate } from "@/lib/dates";
 
 export type HistorySessionPhoto = {
@@ -188,10 +189,10 @@ export function SessionHistory({
                           className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-forest/30"
                         >
                           {p.isVideo ? (
-                            <video
+                            <VideoThumb
                               src={p.photoUrl}
-                              className="h-full w-full object-cover"
-                              muted
+                              className="h-full w-full"
+                              showPlayBadge={false}
                             />
                           ) : (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -457,11 +458,7 @@ function EditSessionModal({
                       <li key={p.id} className="relative">
                         <div className="overflow-hidden rounded-xl border-2 border-forest">
                           {p.isVideo ? (
-                            <video
-                              src={p.photoUrl}
-                              className="aspect-square w-full object-cover"
-                              muted
-                            />
+                            <VideoThumb src={p.photoUrl} />
                           ) : (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -509,11 +506,7 @@ function EditSessionModal({
                             }`}
                           >
                             {item.kind === "video" ? (
-                              <video
-                                src={item.url}
-                                className="aspect-square w-full object-cover"
-                                muted
-                              />
+                              <VideoThumb src={item.url} />
                             ) : (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
